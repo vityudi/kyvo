@@ -147,12 +147,15 @@ src/
     memoriaInsight.ts                          - insights e contexto pessoal (full-text search)
     baseConhecimento.ts                          - base de conhecimento curada (full-text search)
     seedBaseConhecimento.ts                        - popula a base de conhecimento (npm run seed:conhecimento)
+    alertas.ts                                       - orçamento estourado / meta com prazo próximo (dedupe)
+    anomalias.ts                                       - detecção estatística de anomalia por categoria
   lib/
     anthropic.ts        - cliente Claude
     agent.ts              - system prompt + loop de agente (tool use)
     tools.ts                - as tools do agente (schema + dispatcher)
-    telegram.ts                - cliente mínimo da Bot API do Telegram
-    logger.ts                    - logger estruturado (pino)
+    insightGenerator.ts       - geração de texto one-shot (explicação de anomalia, resumo mensal)
+    telegram.ts                 - cliente mínimo da Bot API do Telegram
+    logger.ts                     - logger estruturado (pino)
   routes/telegram.ts             - webhook do Telegram
   server.ts                        - processo "app" (HTTP)
   worker.ts                         - processo "worker" (cron/alertas)
@@ -182,7 +185,8 @@ Se for expor publicamente, lembre de colocar um reverse proxy com TLS na frente 
 | **Fase 0** ✅ | Esqueleto conversacional — registro de despesas e receitas via linguagem natural, com correção manual |
 | **Fase 1** ✅ | Consulta/resumo de transações, orçamentos, metas, memória de preferências e regras de categorização |
 | **Memória RAG** ✅ | Perfil pessoal, contexto narrativo, insights e base de conhecimento curada (full-text search) — "modo conselheiro" |
-| **Fase 2** (em andamento) | Alertas proativos (worker: checagem de orçamento/meta + pipeline de anomalia/resumo mensal) e integração com Open Finance (Pluggy) |
+| **Worker proativo** ✅ | Alertas de orçamento estourado/meta com prazo próximo (worker, deduplicados), detecção de anomalia por categoria e resumo mensal qualitativo (pipeline de consolidação de memória) |
+| **Fase 2** (em andamento) | Integração com Open Finance (Pluggy) — consentimento bancário, contas reais, conciliação com lançamento manual |
 | **Fase 3** | Segundo canal (WhatsApp), relatórios visuais |
 
 ---

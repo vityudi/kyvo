@@ -5,6 +5,12 @@ export interface Usuario {
   telegram_chat_id: number;
 }
 
+/** Usado pelo worker para iterar todos os usuarios (alertas/consolidacao de memoria). */
+export async function listarTodosUsuarios(): Promise<Usuario[]> {
+  const { rows } = await pool.query<Usuario>("select id, telegram_chat_id from usuario");
+  return rows;
+}
+
 /**
  * Garante que existe um usuario para este chat do Telegram, criando (com uma
  * conta manual padrao) no primeiro contato. Idempotente.

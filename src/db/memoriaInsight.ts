@@ -87,6 +87,33 @@ export async function buscarInsights(
   return rows;
 }
 
+/**
+ * Dedupe para o pipeline de consolidacao do worker (RAG_MEMORY_ARCHITECTURE.md,
+ * secao 5) - evita gerar/gravar o mesmo insight duas vezes (ex.: worker
+ * rodando mais de uma vez no mesmo dia/mes). `categoriaMetadata`, quando
+ * informado, filtra tambem por `metadata->>'categoria'` (usado por
+ * tipo='anomalia', que e por categoria).
+ */
+export async function existeInsightNoPeriodo(
+  usuarioId: string,
+  tipo: TipoInsight,
+  periodoReferencia: string,
+  categoriaMetadata?: string,
+): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `select 1
+       from memoria_insight
+      where usuario_id = $1
+        and tipo = $2
+        and periodo_referencia = $3::date
+        and ($4::text is null or metadata->>'categoria' = $4)
+      limit 1`,
+    [usuarioId, tipo, periodoReferencia, categoriaMetadata ?? null],
+  );
+
+  return (rowCount ?? 0) > 0;
+}
+
 export async function excluirInsight(usuarioId: string, insightId: string): Promise<{ id: string; ok: true }> {
   const { rowCount } = await pool.query("delete from memoria_insight where id = $1 and usuario_id = $2", [
     insightId,

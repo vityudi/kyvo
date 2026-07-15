@@ -229,7 +229,7 @@ export async function consultarTransacoes(usuarioId: string, input: ConsultarTra
   return rows;
 }
 
-interface ResumoPeriodo {
+export interface ResumoPeriodo {
   total_despesas: number;
   total_receitas: number;
   saldo: number;
