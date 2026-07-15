@@ -23,11 +23,6 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN e obrigatoria - veja .env.example"),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 
-  // Embeddings (RAG/memoria) - ainda nao usados no esqueleto inicial, mas ja
-  // validados aqui para falhar cedo quando essa camada for implementada.
-  VOYAGE_API_KEY: z.string().optional(),
-  VOYAGE_MODEL: z.string().default("voyage-3"),
-
   // Open Finance (Fase 2+) - opcional no esqueleto inicial.
   PLUGGY_CLIENT_ID: z.string().optional(),
   PLUGGY_CLIENT_SECRET: z.string().optional(),

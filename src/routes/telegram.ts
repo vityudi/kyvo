@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { env } from "../config/env.js";
 import { obterOuCriarUsuario } from "../db/usuario.js";
+import { processarMensagem } from "../lib/agent.js";
 import { logger } from "../lib/logger.js";
 import { sendTelegramMessage, type TelegramUpdate } from "../lib/telegram.js";
 
@@ -27,13 +28,16 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
     const usuario = await obterOuCriarUsuario(message.chat.id);
     logger.info({ usuarioId: usuario.id, texto: message.text }, "mensagem recebida");
 
-    // TODO (Fase 0): substituir este eco pelo loop de agente com tool use.
-    // Ver src/lib/anthropic.ts e docs/TOOLS_FASE_0_1.md no repo de planejamento.
-    await sendTelegramMessage(
-      message.chat.id,
-      "Recebi sua mensagem! O registro de gastos via IA ainda esta sendo implementado - " +
-        "por enquanto eu so confirmo que o webhook esta funcionando.",
-    );
+    try {
+      const resposta = await processarMensagem(usuario.id, message.text);
+      await sendTelegramMessage(message.chat.id, resposta);
+    } catch (err) {
+      logger.error({ err, usuarioId: usuario.id }, "falha ao processar mensagem com o agente");
+      await sendTelegramMessage(
+        message.chat.id,
+        "Deu um erro aqui do meu lado processando sua mensagem. Pode tentar de novo?",
+      );
+    }
 
     return reply.code(200).send({ ok: true });
   });

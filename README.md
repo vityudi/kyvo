@@ -2,7 +2,7 @@
 
 Assistente financeiro pessoal com IA e memória. Você conversa em linguagem natural pelo Telegram — "gastei 47 reais no ifood", "quanto eu gastei com mercado esse mês?", "separa 500 reais pra viagem em dezembro" — e o Kyvo registra, responde e ajuda a planejar suas finanças, aprendendo suas preferências e o contexto da sua vida ao longo do tempo para dar sugestões que realmente fazem sentido pra você.
 
-> Status: esqueleto inicial (Fase 0 do roadmap). O servidor, o worker e o schema do banco já sobem via Docker Compose; a extração de transações por linguagem natural via Claude ainda está sendo implementada — ver [Roadmap](#roadmap).
+> Status: Fase 0, Fase 1 e a camada de memória pessoal/RAG (perfil, contexto, insights, conhecimento curado) já implementadas e rodando via tool use com o Claude. Alertas proativos (worker) e integração com Open Finance (Pluggy) ainda não — ver [Roadmap](#roadmap).
 
 ---
 
@@ -23,16 +23,16 @@ A IA nunca escreve direto no banco a partir de texto livre: toda ação passa po
 Usuário ⇄ Telegram (webhook) ⇄ app (Fastify)  ──tool use──▶ Claude API
                                     │
                                     ▼
-                              Postgres + pgvector
+                              Postgres (full-text search nativo)
                                     ▲
                                     │
                               worker (cron) ── alertas proativos,
                                                 consolidação de memória
 ```
 
-- **`app`** — recebe o webhook do Telegram, monta o contexto (preferências, metas, histórico recente), chama o Claude com tool use, executa as tools contra o Postgres e responde ao usuário.
+- **`app`** — recebe o webhook do Telegram, monta o contexto (preferências, metas, perfil, histórico recente), chama o Claude com tool use, executa as tools contra o Postgres e responde ao usuário.
 - **`worker`** — processo separado, roda independente de mensagens: verifica orçamentos/metas para disparar alertas proativos, e (nas fases seguintes) consolida memória semântica periodicamente.
-- **`postgres`** — fonte de verdade de tudo: transações, contas, orçamentos, metas, preferências, e a camada de memória vetorial (pgvector) usada para dar respostas mais assertivas em planejamento.
+- **`postgres`** — fonte de verdade de tudo: transações, contas, orçamentos, metas, preferências, perfil pessoal e a camada de memória (insights + base de conhecimento curada, buscados por full-text search nativo) usada para dar respostas mais assertivas em planejamento. Único serviço de IA usado no projeto é o Claude — sem modelo de embedding nem vendor adicional.
 
 O design completo — por que essas decisões, o roteamento entre SQL determinístico e busca semântica, os guardrails de privacidade da memória pessoal — está documentado no material de planejamento do projeto (fora deste repositório de código).
 
@@ -44,11 +44,10 @@ O design completo — por que essas decisões, o roteamento entre SQL determiní
 |---|---|
 | Linguagem/runtime | TypeScript + Node.js 20 |
 | Servidor HTTP | Fastify |
-| Banco de dados | PostgreSQL + [pgvector](https://github.com/pgvector/pgvector) |
-| IA | [Claude API](https://www.anthropic.com/api) (Anthropic), via tool use |
+| Banco de dados | PostgreSQL (full-text search nativo para a camada de memória/RAG) |
+| IA | [Claude API](https://www.anthropic.com/api) (Anthropic), via tool use — único serviço de IA do projeto |
 | Canal de chat | Telegram Bot API |
 | Integração bancária | [Pluggy](https://pluggy.ai/) (Open Finance Brasil) — a partir da Fase 2 |
-| Embeddings (memória/RAG) | Voyage AI — modelo a confirmar |
 | Empacotamento | Docker + Docker Compose |
 
 ---
@@ -71,7 +70,7 @@ Edite `.env` e preencha pelo menos:
 | `TELEGRAM_BOT_TOKEN` | Fale com [@BotFather](https://t.me/BotFather) no Telegram e crie um bot |
 | `POSTGRES_PASSWORD` | Defina uma senha forte própria — não use o valor de exemplo |
 
-As demais variáveis (`PLUGGY_*`, `VOYAGE_*`) só são necessárias a partir das fases posteriores do roadmap — pode deixar em branco por enquanto. Veja a lista completa comentada em [`.env.example`](./.env.example).
+As demais variáveis (`PLUGGY_*`) só são necessárias a partir das fases posteriores do roadmap — pode deixar em branco por enquanto. Veja a lista completa comentada em [`.env.example`](./.env.example).
 
 ### 2. Suba a stack
 
@@ -79,7 +78,7 @@ As demais variáveis (`PLUGGY_*`, `VOYAGE_*`) só são necessárias a partir das
 docker compose up --build -d
 ```
 
-Isso builda a imagem da aplicação, sobe o Postgres com a extensão `pgvector`, aplica as migrations automaticamente (o `app` e o `worker` rodam as migrations pendentes no boot, de forma segura mesmo subindo ao mesmo tempo) e inicia os dois serviços.
+Isso builda a imagem da aplicação, sobe o Postgres, aplica as migrations automaticamente (o `app` e o `worker` rodam as migrations pendentes no boot, de forma segura mesmo subindo ao mesmo tempo) e inicia os dois serviços.
 
 Verifique que subiu:
 
@@ -115,7 +114,7 @@ docker compose down -v           # parar e apagar também o volume do Postgres
 
 ## Desenvolvimento sem Docker
 
-Útil para iterar rápido no código. Ainda assim precisa de um Postgres com `pgvector` disponível — pode ser o do próprio `docker compose up postgres`, apontando `POSTGRES_HOST=localhost` no seu `.env` local.
+Útil para iterar rápido no código. Ainda assim precisa de um Postgres disponível — pode ser o do próprio `docker compose up postgres`, apontando `POSTGRES_HOST=localhost` no seu `.env` local.
 
 ```bash
 npm install
@@ -133,19 +132,30 @@ Scripts disponíveis: `npm run build`, `npm run start`/`start:worker` (produçã
 
 ```
 src/
-  config/env.ts       - validação centralizada de variáveis de ambiente (zod)
+  config/env.ts             - validação centralizada de variáveis de ambiente (zod)
   db/
-    pool.ts            - pool de conexão com o Postgres
-    migrate.ts          - runner de migrations (idempotente, com lock)
-    migrations/          - schema versionado, em SQL puro
-    usuario.ts            - acesso a dados do usuário
+    pool.ts                  - pool de conexão com o Postgres
+    migrate.ts               - runner de migrations (idempotente, com lock)
+    migrations/                - schema versionado, em SQL puro
+    usuario.ts                   - acesso a dados do usuário/conta
+    categoria.ts                  - validação e listagem de categorias
+    transacao.ts                    - registro/edição/consulta de despesas e receitas
+    orcamento.ts, meta.ts              - orçamentos e metas
+    regraCategorizacao.ts                - regras de categorização aprendidas
+    mensagem.ts                            - histórico curto de conversa
+    perfilUsuario.ts                         - perfil pessoal (core memory)
+    memoriaInsight.ts                          - insights e contexto pessoal (full-text search)
+    baseConhecimento.ts                          - base de conhecimento curada (full-text search)
+    seedBaseConhecimento.ts                        - popula a base de conhecimento (npm run seed:conhecimento)
   lib/
-    anthropic.ts        - cliente Claude (ponto de entrada do loop de agente)
-    telegram.ts           - cliente mínimo da Bot API do Telegram
-    logger.ts              - logger estruturado (pino)
-  routes/telegram.ts     - webhook do Telegram
-  server.ts                - processo "app" (HTTP)
-  worker.ts                 - processo "worker" (cron/alertas)
+    anthropic.ts        - cliente Claude
+    agent.ts              - system prompt + loop de agente (tool use)
+    tools.ts                - as tools do agente (schema + dispatcher)
+    telegram.ts                - cliente mínimo da Bot API do Telegram
+    logger.ts                    - logger estruturado (pino)
+  routes/telegram.ts             - webhook do Telegram
+  server.ts                        - processo "app" (HTTP)
+  worker.ts                         - processo "worker" (cron/alertas)
 ```
 
 Schema versionado em `src/db/migrations/*.sql`, aplicado automaticamente no boot de `server.ts`/`worker.ts` — não é necessário rodar uma migration manualmente em uso normal, mas `npm run migrate` está disponível para aplicar fora do boot da aplicação (ex.: num passo de deploy separado).
@@ -159,7 +169,7 @@ O projeto foi desenhado para ser replicável — qualquer pessoa pode clonar est
 - **Toda configuração é por variável de ambiente** (`.env`) — nenhuma chave, token ou segredo fica no código.
 - **Um único `docker-compose.yml`** sobe a stack inteira (app + worker + banco) em qualquer host com Docker — VPS própria, Railway, Fly.io, um servidor em casa.
 - **O banco é o único estado persistente** (volume `kyvo_postgres_data`) — backup e restore da instância se resumem a isso.
-- **Nenhuma integração é obrigatória para rodar o núcleo do produto** — Pluggy (Open Finance) e Voyage (embeddings) são aditivas; o Kyvo funciona com só `ANTHROPIC_API_KEY` e `TELEGRAM_BOT_TOKEN` preenchidos.
+- **Nenhuma integração é obrigatória para rodar o núcleo do produto** — Pluggy (Open Finance) é aditiva; o Kyvo funciona com só `ANTHROPIC_API_KEY` e `TELEGRAM_BOT_TOKEN` preenchidos.
 
 Se for expor publicamente, lembre de colocar um reverse proxy com TLS na frente do serviço `app` (o `docker-compose.yml` não inclui isso de propósito, para não amarrar o projeto a uma escolha específica de proxy/certificado) e de **não** expor a porta do Postgres publicamente (por padrão ela já não é publicada — ver comentário em `docker-compose.yml`).
 
@@ -169,9 +179,10 @@ Se for expor publicamente, lembre de colocar um reverse proxy com TLS na frente 
 
 | Fase | Escopo |
 |---|---|
-| **Fase 0** (em andamento) | Esqueleto conversacional — registro de despesas e receitas via linguagem natural, com correção manual |
-| **Fase 1** | Consulta/resumo de transações, orçamentos, metas, memória de preferências e regras de categorização |
-| **Fase 2** | Alertas proativos (worker), integração com Open Finance (Pluggy), memória semântica (RAG) para insights e conselhos personalizados |
+| **Fase 0** ✅ | Esqueleto conversacional — registro de despesas e receitas via linguagem natural, com correção manual |
+| **Fase 1** ✅ | Consulta/resumo de transações, orçamentos, metas, memória de preferências e regras de categorização |
+| **Memória RAG** ✅ | Perfil pessoal, contexto narrativo, insights e base de conhecimento curada (full-text search) — "modo conselheiro" |
+| **Fase 2** (em andamento) | Alertas proativos (worker: checagem de orçamento/meta + pipeline de anomalia/resumo mensal) e integração com Open Finance (Pluggy) |
 | **Fase 3** | Segundo canal (WhatsApp), relatórios visuais |
 
 ---
@@ -181,7 +192,7 @@ Se for expor publicamente, lembre de colocar um reverse proxy com TLS na frente 
 - **A IA nunca é a fonte de verdade de um número.** Saldo, histórico e totais sempre vêm de uma query determinística — a IA consulta, não "lembra".
 - **Confirmação proporcional à confiança.** Uma extração clara é registrada direto; algo ambíguo gera uma pergunta antes de gravar.
 - **Memória pessoal tem limites explícitos.** O que o assistente pode guardar sobre a vida do usuário (família, trabalho, objetivos) é uma lista fechada — dados sensíveis (saúde, religião, orientação, política, dados de terceiros) nunca são capturados, mesmo mencionados de passagem.
-- **Sem infraestrutura desnecessária.** Cada peça nova (worker, pgvector, Open Finance) só entra quando o produto realmente precisa dela — nada é adicionado especulativamente.
+- **Sem infraestrutura desnecessária.** Cada peça nova (worker, Open Finance) só entra quando o produto realmente precisa dela — nada é adicionado especulativamente. A camada de memória usa full-text search nativo do Postgres em vez de embeddings, mantendo o Claude como único serviço de IA do projeto.
 
 ---
 

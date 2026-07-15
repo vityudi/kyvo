@@ -3,7 +3,6 @@
 -- docs/RAG_MEMORY_ARCHITECTURE.md e docs/TOOLS_FASE_0_1.md.
 
 create extension if not exists pgcrypto; -- gen_random_uuid()
-create extension if not exists vector;   -- pgvector, usado pelas tabelas de memoria/RAG
 
 -- ---------------------------------------------------------------------------
 -- Usuario e contas
@@ -154,9 +153,10 @@ create table perfil_usuario (
 -- Cobre insights financeiros (resumo_mensal, anomalia, padrao_recorrente,
 -- decisao_usuario) e contexto pessoal narrativo (contexto_pessoal).
 --
--- Dimensao do vetor (1024) e um placeholder ate confirmar o modelo de
--- embedding (Voyage AI) a ser usado - ver docs/RAG_MEMORY_ARCHITECTURE.md,
--- secao 6, e .env.example (VOYAGE_MODEL).
+-- Busca por full-text search nativo do Postgres (tsvector/ts_rank), nao por
+-- similaridade vetorial - decisao de nao depender de nenhum modelo de
+-- embedding/servico de IA alem do Claude (ver docs/RAG_MEMORY_ARCHITECTURE.md,
+-- secao 6).
 -- ---------------------------------------------------------------------------
 
 create table memoria_insight (
@@ -185,8 +185,7 @@ create table memoria_insight (
     periodo_referencia date,
     conteudo            text not null,
 
-    embedding               vector(1024) not null,
-    embedding_model_version text not null default 'voyage-3',
+    busca tsvector generated always as (to_tsvector('portuguese', conteudo)) stored,
 
     metadata        jsonb not null default '{}'::jsonb,
     origem          text not null default 'worker' check (origem in ('worker', 'conversa')),
@@ -198,6 +197,7 @@ create table memoria_insight (
 create index idx_memoria_insight_usuario on memoria_insight (usuario_id);
 create index idx_memoria_insight_usuario_tipo on memoria_insight (usuario_id, tipo);
 create index idx_memoria_insight_periodo on memoria_insight (usuario_id, periodo_referencia);
+create index idx_memoria_insight_busca on memoria_insight using gin (busca);
 
 -- ---------------------------------------------------------------------------
 -- Base de conhecimento curada (RAG_MEMORY_ARCHITECTURE.md, secao 3.5/7.2)
@@ -210,8 +210,7 @@ create table base_conhecimento (
     titulo          text not null,
     conteudo        text not null,
 
-    embedding               vector(1024) not null,
-    embedding_model_version text not null default 'voyage-3',
+    busca tsvector generated always as (to_tsvector('portuguese', titulo || ' ' || conteudo)) stored,
 
     tags            text[] not null default '{}',
     ativo           boolean not null default true,
@@ -222,3 +221,4 @@ create table base_conhecimento (
 
 create index idx_base_conhecimento_tags on base_conhecimento using gin (tags);
 create index idx_base_conhecimento_ativo on base_conhecimento (ativo);
+create index idx_base_conhecimento_busca on base_conhecimento using gin (busca);

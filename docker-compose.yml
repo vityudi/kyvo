@@ -3,13 +3,13 @@
 #   docker compose up --build -d
 #
 # Servicos:
-#   postgres - banco de dados (com extensao pgvector para a camada de memoria/RAG)
+#   postgres - banco de dados (camada de memoria/RAG usa full-text search nativo, sem extensoes extras)
 #   app      - servidor HTTP que recebe o webhook do Telegram e conversa com o Claude
 #   worker   - processo separado para alertas proativos e consolidacao de memoria (cron)
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
