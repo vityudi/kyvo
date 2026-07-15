@@ -1,0 +1,63 @@
+# Stack completa do Kyvo para rodar em qualquer infra propria via Docker.
+# Uso: copie .env.example para .env, preencha os valores, e rode:
+#   docker compose up --build -d
+#
+# Servicos:
+#   postgres - banco de dados (com extensao pgvector para a camada de memoria/RAG)
+#   app      - servidor HTTP que recebe o webhook do Telegram e conversa com o Claude
+#   worker   - processo separado para alertas proativos e consolidacao de memoria (cron)
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - kyvo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Nao exponha a porta publicamente em producao - descomente so para
+    # depurar localmente com um client de Postgres na sua maquina.
+    # ports:
+    #   - "${POSTGRES_PORT:-5432}:5432"
+
+  app:
+    build: .
+    command: ["node", "dist/server.js"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    build: .
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  kyvo_postgres_data:

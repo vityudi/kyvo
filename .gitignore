@@ -1,0 +1,21 @@
+# Dependencias e build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dados locais de infra (docker compose)
+.postgres-data/
+
+# Editor / SO
+.DS_Store
+.vscode/
+.idea/
