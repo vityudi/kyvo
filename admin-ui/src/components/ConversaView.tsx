@@ -189,6 +189,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
               <div className="flex flex-col gap-4">
                 {mensagens.map((m) => {
                   const transcricoes = m.anexos.filter((a) => a.tipo === "audio" && a.transcricao);
+                  const conteudoExibivel = m.role === "user" ? removerAnotacoesInternas(m.conteudo) : m.conteudo;
 
                   return m.role === "user" ? (
                     <div key={m.id} className="flex flex-col items-end gap-1">
@@ -200,7 +201,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
                             ))}
                           </div>
                         )}
-                        {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
+                        {conteudoExibivel && <p className="whitespace-pre-wrap">{conteudoExibivel}</p>}
                         <p className="mt-1 text-[10px] opacity-70">{formatarHorario(m.criadoEm)}</p>
                       </div>
                       {transcricoes.map((anexo) => (
@@ -221,7 +222,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
                               ))}
                             </div>
                           )}
-                          {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
+                          {conteudoExibivel && <p className="whitespace-pre-wrap">{conteudoExibivel}</p>}
                           <p className="mt-1 text-[10px] text-text-tertiary">{formatarHorario(m.criadoEm)}</p>
                         </div>
                       </div>
@@ -341,6 +342,21 @@ function AnexoPreview({ anexo, onAmpliarImagem }: { anexo: Anexo; onAmpliarImage
       <span className="truncate">{anexo.nomeArquivo ?? "Documento"}</span>
     </a>
   );
+}
+
+/**
+ * O worker do Telegram (src/routes/telegram.ts) injeta anotacoes tipo
+ * "[transcrição do áudio enviado]: ..." no texto da mensagem do usuario, so
+ * pra dar contexto ao LLM - o preview do anexo (player de audio + transcricao
+ * colapsavel) ja mostra essa informacao visualmente, entao essas linhas nao
+ * devem aparecer duplicadas na bolha da mensagem.
+ */
+function removerAnotacoesInternas(conteudo: string): string {
+  return conteudo
+    .split("\n")
+    .filter((linha) => !linha.trim().startsWith("["))
+    .join("\n")
+    .trim();
 }
 
 function TranscricaoAudio({ transcricao }: { transcricao: string }) {
