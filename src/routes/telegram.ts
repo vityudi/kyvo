@@ -12,7 +12,7 @@ import { salvarArquivo } from "../lib/storage.js";
 import {
   ArquivoTelegramGrandeDemaisError,
   baixarArquivoTelegram,
-  sendTelegramMessage,
+  sendTelegramMessageComRetentativa,
   type TelegramUpdate,
 } from "../lib/telegram.js";
 
@@ -137,12 +137,21 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
     if (message.text && COMANDOS_NOVA_CONVERSA.includes(message.text.trim())) {
       await iniciarNovaConversa(usuario.id);
       logger.info({ usuarioId: usuario.id }, "nova conversa iniciada via comando");
-      await sendTelegramMessage(message.chat.id, "Prontinho, começamos uma conversa nova! O que você precisa?");
+      await sendTelegramMessageComRetentativa(
+        message.chat.id,
+        "Prontinho, começamos uma conversa nova! O que você precisa?",
+      );
       return reply.code(200).send({ ok: true });
     }
 
     logger.info({ usuarioId: usuario.id, texto: message.text }, "mensagem recebida");
 
+    // Processamento (agente) e entrega (Telegram) sao etapas separadas: uma
+    // falha transitoria so na entrega nao pode virar uma segunda mensagem de
+    // erro fabricada substituindo a resposta real ja persistida em `mensagem`
+    // - isso deixaria o historico do painel admin (que le do banco) e o que
+    // chega no Telegram inconsistentes entre si.
+    let resposta: string;
     try {
       const conversa = await obterOuCriarConversaAtiva(usuario.id);
       const { textoAdicional, conteudoParaLlm, anexosParaPersistir } = await processarAnexos(message);
@@ -150,16 +159,16 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
       const texto = [message.text ?? message.caption ?? "", textoAdicional].filter(Boolean).join("\n");
       const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir };
 
-      const resposta = await processarMensagem(conversa.id, usuario.id, turno);
-      await sendTelegramMessage(message.chat.id, resposta);
+      resposta = await processarMensagem(conversa.id, usuario.id, turno);
     } catch (err) {
       logger.error({ err, usuarioId: usuario.id }, "falha ao processar mensagem com o agente");
-      const resposta =
+      resposta =
         err instanceof LlmNaoConfiguradoError
           ? "Ainda não estou configurado — peça para quem administra o bot configurar um provedor de IA em /admin."
           : "Deu um erro aqui do meu lado processando sua mensagem. Pode tentar de novo?";
-      await sendTelegramMessage(message.chat.id, resposta);
     }
+
+    await sendTelegramMessageComRetentativa(message.chat.id, resposta);
 
     return reply.code(200).send({ ok: true });
   });

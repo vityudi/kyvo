@@ -37,6 +37,8 @@ services:
       POSTGRES_HOST: postgres
     ports:
       - "${PORT:-3000}:3000"
+    volumes:
+      - kyvo_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,3 +63,4 @@ services:
 
 volumes:
   kyvo_postgres_data:
+  kyvo_uploads:

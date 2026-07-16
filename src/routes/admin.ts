@@ -25,7 +25,7 @@ import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
 import type { ContentPart } from "../lib/llm/types.js";
 import { salvarArquivo, streamArquivo } from "../lib/storage.js";
-import { getTelegramBotStatus, sendTelegramMessage, setTelegramWebhook } from "../lib/telegram.js";
+import { getTelegramBotStatus, sendTelegramMessageComRetentativa, setTelegramWebhook } from "../lib/telegram.js";
 
 function tipoAnexoPorMime(mimeType: string): TipoAnexo {
   if (mimeType.startsWith("image/")) return "imagem";
@@ -235,11 +235,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ ok: false, erro: "mensagem vazia" });
     }
 
+    let resposta: string;
     try {
       const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir };
-      const resposta = await processarMensagem(conversa.id, conversa.usuarioId, turno);
-      await sendTelegramMessage(conversa.telegramChatId, resposta);
-      return { ok: true, resposta };
+      resposta = await processarMensagem(conversa.id, conversa.usuarioId, turno);
     } catch (err) {
       const erro =
         err instanceof LlmNaoConfiguradoError
@@ -247,6 +246,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           : "Deu um erro processando essa mensagem.";
       return reply.code(502).send({ ok: false, erro });
     }
+
+    // Entrega ao Telegram e uma etapa a parte do processamento: a resposta ja
+    // foi persistida em `mensagem` acima, entao uma falha transitoria so na
+    // entrega nao deve virar um 502 aqui - o painel e o Telegram devem
+    // sempre concordar sobre o que de fato aconteceu na conversa.
+    await sendTelegramMessageComRetentativa(conversa.telegramChatId, resposta);
+    return { ok: true, resposta };
   });
 
   app.get<{ Params: { anexoId: string } }>("/admin/api/anexos/:anexoId", async (request, reply) => {

@@ -40,6 +40,39 @@ export async function sendTelegramMessage(chatId: number, text: string): Promise
   }
 }
 
+const TENTATIVAS_ENVIO = 3;
+const BASE_MS_BACKOFF_ENVIO = 500;
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Mesmo sendTelegramMessage, mas absorvendo falhas transitorias de rede (ex.:
+ * ETIMEDOUT logo apos o processo subir) com ate 2 retentativas. A resposta do
+ * agente ja foi processada e persistida em `mensagem` antes de chegar aqui -
+ * um erro de entrega e so um problema de rede, nao deve virar uma segunda
+ * mensagem de erro fabricada (isso deixaria o historico do painel admin e o
+ * que o usuario ve no Telegram inconsistentes entre si). Se todas as
+ * tentativas falharem, so loga - a conversa continua correta no banco, o
+ * usuario so nao recebe essa entrega especifica no Telegram.
+ */
+export async function sendTelegramMessageComRetentativa(chatId: number, text: string): Promise<void> {
+  for (let tentativa = 1; tentativa <= TENTATIVAS_ENVIO; tentativa++) {
+    try {
+      await sendTelegramMessage(chatId, text);
+      return;
+    } catch (err) {
+      if (tentativa === TENTATIVAS_ENVIO) {
+        logger.error({ err, chatId }, "falha ao entregar mensagem no Telegram apos todas as tentativas");
+        return;
+      }
+      logger.warn({ err, chatId, tentativa }, "falha temporaria ao enviar mensagem no Telegram, tentando novamente");
+      await esperar(BASE_MS_BACKOFF_ENVIO * tentativa);
+    }
+  }
+}
+
 /**
  * Registra a URL publica que o Telegram deve chamar a cada update (ex.: a URL
  * de um tunel ngrok em dev local). Chamado a partir do painel /admin - nao ha
