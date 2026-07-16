@@ -1,4 +1,11 @@
 import { buscarPrincipios } from "../db/baseConhecimento.js";
+import {
+  cancelarPendencia,
+  concluirTarefa,
+  criarLembrete,
+  criarTarefa,
+  listarPendencias,
+} from "../db/lembrete.js";
 import { criarOuAtualizarOrcamento } from "../db/orcamento.js";
 import { atualizarMeta, criarMeta } from "../db/meta.js";
 import { buscarInsights, excluirInsight, registrarInsight } from "../db/memoriaInsight.js";
@@ -215,6 +222,95 @@ const baseToolDefinitions: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "criar_lembrete",
+    description:
+      "Cria um lembrete pontual ou recorrente que o Kyvo vai enviar proativamente pelo Telegram na data/hora certa, sem o usuário precisar perguntar de novo. Use quando o usuário pedir para ser lembrado de algo com um horário específico, ex.: 'me lembra de pagar a fatura do cartão dia 20', 'me avisa amanhã às 9h pra ligar pro banco', 'me lembra toda sexta às 18h de revisar os gastos da semana'. Resolva a data/hora relativa mencionada pelo usuário (ex.: 'amanhã', 'dia 20', 'toda sexta às 18h') a partir da data e hora atuais informadas no system prompt - se o usuário não der uma hora específica, use 09:00 do dia informado como padrão razoável. Para um afazer sem hora marcada (ex.: 'preciso revisar meu orçamento esse mês'), use criar_tarefa em vez desta tool.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descricao: {
+          type: "string",
+          description: "O que o usuário quer ser lembrado, de forma objetiva e curta, ex.: 'Pagar fatura do cartão', 'Ligar pro banco'",
+        },
+        data_hora: {
+          type: "string",
+          description:
+            "Data e hora em que o lembrete deve ser enviado, no formato 'YYYY-MM-DDTHH:mm:ss' (horário local do usuário, sem offset de fuso - o sistema assume o fuso America/Sao_Paulo). Resolva expressões relativas ('amanhã', 'daqui a 2 dias', 'dia 20') com base na data/hora atual informada no system prompt.",
+        },
+        recorrencia: {
+          type: "string",
+          enum: ["diaria", "semanal", "mensal", "anual"],
+          description: "Se o lembrete deve se repetir automaticamente. Omitir para um lembrete pontual (não se repete).",
+        },
+      },
+      required: ["descricao", "data_hora"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "criar_tarefa",
+    description:
+      "Cria uma tarefa/afazer para o usuário rastrear, ex.: 'preciso revisar meu orçamento esse mês', 'tenho que pesquisar um plano de saúde novo'. Diferente de criar_lembrete, uma tarefa NÃO gera nenhum aviso automático pelo Telegram - é só um item de checklist que o usuário consulta e marca como concluído quando quiser, via listar_pendencias e concluir_tarefa. Use esta tool quando o usuário quiser guardar um afazer sem um horário de aviso específico; se o usuário quiser ser avisado numa hora marcada, use criar_lembrete.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descricao: { type: "string", description: "O afazer em si, de forma objetiva e curta" },
+        data_hora: {
+          type: "string",
+          description:
+            "Prazo de referência da tarefa, se houver, no formato 'YYYY-MM-DDTHH:mm:ss' (horário local, mesma convenção de criar_lembrete). Omitir se não houver prazo definido - isso NÃO dispara nenhum aviso, é só informativo.",
+        },
+      },
+      required: ["descricao"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_pendencias",
+    description:
+      "Lista os lembretes e/ou tarefas do usuário. Use para responder perguntas como 'o que eu tenho agendado?', 'quais lembretes eu tenho essa semana?', 'o que eu preciso fazer?', 'o que está pendente?'. Por padrão retorna só os pendentes (nem disparados/concluídos, nem cancelados); passe status para ver concluídos ou cancelados, e tipo para filtrar só lembretes ou só tarefas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: { type: "string", enum: ["lembrete", "tarefa"], description: "Filtrar por tipo. Omitir para ver lembretes e tarefas juntos." },
+        status: {
+          type: "string",
+          enum: ["pendente", "concluido", "cancelado"],
+          description: "Filtrar por status. Default: 'pendente'.",
+        },
+        limite: { type: "integer", minimum: 1, maximum: 50, description: "Máximo de itens a retornar. Default: 20." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "concluir_tarefa",
+    description:
+      "Marca uma tarefa como concluída, ex.: 'já revisei o orçamento, pode marcar como feito', 'terminei aquela tarefa do plano de saúde'. Só se aplica a tarefas - um lembrete se marca como concluído sozinho quando dispara, não precisa (e não deve) ser concluído manualmente com esta tool. Use o id retornado por criar_tarefa ou encontrado via listar_pendencias; se não tiver certeza de qual é, liste primeiro.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "cancelar_pendencia",
+    description:
+      "Cancela um lembrete ou tarefa pendente que o usuário não quer mais, ex.: 'esquece aquele lembrete da fatura', 'cancela a tarefa de revisar o orçamento'. Use o id retornado por criar_lembrete/criar_tarefa ou encontrado via listar_pendencias; se não tiver certeza de qual é, liste primeiro com listar_pendencias.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 /**
@@ -355,6 +451,18 @@ export async function executeTool(name: string, input: unknown, usuarioId: strin
   }
 }
 
+/**
+ * Converte um horario local "ingenuo" (sem offset, ex.: '2026-07-20T09:00:00')
+ * resolvido pelo modelo em um instante com offset fixo de America/Sao_Paulo,
+ * para o Postgres armazenar como timestamptz correto. Nao ha timezone por
+ * usuario hoje em nenhuma parte do app, e o Brasil nao observa horario de
+ * verao desde 2019, entao um offset fixo -03:00 e seguro. Se o modelo ja
+ * incluir um offset/Z, usa como veio.
+ */
+function resolverDataHoraLocalSp(dataHoraLocal: string): string {
+  return /Z$|[+-]\d{2}:\d{2}$/.test(dataHoraLocal) ? dataHoraLocal : `${dataHoraLocal}-03:00`;
+}
+
 async function despachar(name: string, input: any, usuarioId: string): Promise<unknown> {
   switch (name) {
     case "registrar_gasto":
@@ -405,6 +513,23 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return buscarPrincipios(input.query, input.limite);
     case "esquecer_contexto_pessoal":
       return excluirInsight(usuarioId, input.memoria_id);
+    case "criar_lembrete":
+      return criarLembrete(usuarioId, {
+        descricao: input.descricao,
+        data_hora: resolverDataHoraLocalSp(input.data_hora),
+        recorrencia: input.recorrencia,
+      });
+    case "criar_tarefa":
+      return criarTarefa(usuarioId, {
+        descricao: input.descricao,
+        data_hora: input.data_hora ? resolverDataHoraLocalSp(input.data_hora) : undefined,
+      });
+    case "listar_pendencias":
+      return listarPendencias(usuarioId, input);
+    case "concluir_tarefa":
+      return concluirTarefa(usuarioId, input.id);
+    case "cancelar_pendencia":
+      return cancelarPendencia(usuarioId, input.id);
     default:
       throw new Error(`tool desconhecida: ${name}`);
   }

@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { metasComPrazoProximo, orcamentosEstourados, tentarRegistrarAlerta } from "./db/alertas.js";
 import { detectarAnomalias } from "./db/anomalias.js";
+import { dispararLembretesVencidos } from "./db/lembrete.js";
 import { runMigrations } from "./db/migrate.js";
 import { existeInsightNoPeriodo, registrarInsight } from "./db/memoriaInsight.js";
 import { pool } from "./db/pool.js";
@@ -55,6 +56,23 @@ async function verificarAlertas(): Promise<void> {
   }
 
   logger.info({ usuarios: usuarios.length }, "[worker] verificacao de alertas concluida");
+}
+
+/** Dispara lembretes vencidos via Telegram - best-effort, sem retry (mesmo espirito de verificarAlertas). */
+async function dispararLembretes(): Promise<void> {
+  const lembretes = await dispararLembretesVencidos();
+
+  for (const lembrete of lembretes) {
+    try {
+      await sendTelegramMessage(lembrete.telegram_chat_id, `Lembrete: ${lembrete.descricao}`);
+    } catch (err) {
+      logger.error({ err, lembreteId: lembrete.id }, "[worker] falha ao enviar lembrete");
+    }
+  }
+
+  if (lembretes.length) {
+    logger.info({ enviados: lembretes.length }, "[worker] lembretes disparados");
+  }
 }
 
 /**
@@ -126,6 +144,10 @@ async function main(): Promise<void> {
 
   cron.schedule("0 * * * *", () => {
     verificarAlertas().catch((err) => logger.error(err, "[worker] falha na verificacao de alertas"));
+  });
+
+  cron.schedule("* * * * *", () => {
+    dispararLembretes().catch((err) => logger.error(err, "[worker] falha ao disparar lembretes"));
   });
 
   cron.schedule("0 6 * * *", () => {

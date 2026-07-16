@@ -48,8 +48,17 @@ async function buildSystemPrompt(usuarioId: string): Promise<string> {
 
   const blocoMemoriaRag = await buildBlocoMemoriaRag(usuarioId);
 
+  const dataHoraAtual = new Date().toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
   return `Voce e o Kyvo, um assistente financeiro pessoal que conversa em portugues do Brasil, \
 de forma direta e amigavel, como um amigo que entende de financas.
+
+Data e hora atuais: ${dataHoraAtual} (fuso America/Sao_Paulo). Use isso para resolver datas \
+relativas mencionadas pelo usuario (ex.: "amanha", "sexta que vem", "dia 20").
 
 Principios inegociaveis:
 - Voce NUNCA e a fonte de verdade sobre saldo, historico de transacoes, orcamentos ou metas. \
