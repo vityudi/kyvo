@@ -52,6 +52,30 @@ export function testarProvedor(provider: LlmProvider): Promise<ApiOk | ApiErro> 
   );
 }
 
+export interface TelegramStatus {
+  conectado: boolean;
+  botId?: number;
+  botUsername?: string;
+  botNome?: string;
+  webhookUrl: string | null;
+  webhookSecretConfigurado: boolean;
+  ultimoErroWebhook: string | null;
+  erro?: string;
+}
+
+export function obterStatusTelegram(): Promise<TelegramStatus> {
+  return request("/admin/api/telegram/status");
+}
+
+export interface IntegracoesStatus {
+  groqConfigurado: boolean;
+  pluggyConfigurado: boolean;
+}
+
+export function obterIntegracoes(): Promise<IntegracoesStatus> {
+  return request("/admin/api/integracoes");
+}
+
 export interface ConversaResumo {
   id: string;
   usuarioId: string;

@@ -172,7 +172,7 @@ export function Sidebar({
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-text-secondary">
             <GearSix size={15} />
           </div>
-          <span className="truncate text-sm font-medium text-text-primary">Provedor de IA</span>
+          <span className="truncate text-sm font-medium text-text-primary">Configurações</span>
         </button>
       </div>
     </div>

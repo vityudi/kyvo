@@ -93,3 +93,66 @@ function inferirMimeTypePorExtensao(filePath: string): string {
   if (filePath.endsWith(".pdf")) return "application/pdf";
   return "application/octet-stream";
 }
+
+export interface TelegramBotStatus {
+  conectado: boolean;
+  botId?: number;
+  botUsername?: string;
+  botNome?: string;
+  webhookUrl: string | null;
+  webhookSecretConfigurado: boolean;
+  ultimoErroWebhook: string | null;
+  erro?: string;
+}
+
+/**
+ * Status da integracao com o Telegram para o painel de configuracoes -
+ * getMe confirma que o token e valido e traz o @username do bot, getWebhookInfo
+ * mostra se o webhook esta registrado e o ultimo erro reportado pelo Telegram
+ * (util pra diagnosticar sem precisar olhar log do servidor).
+ */
+export async function getTelegramBotStatus(): Promise<TelegramBotStatus> {
+  try {
+    const [meResponse, webhookResponse] = await Promise.all([
+      fetch(`${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/getMe`),
+      fetch(`${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`),
+    ]);
+
+    if (!meResponse.ok) {
+      return {
+        conectado: false,
+        webhookUrl: null,
+        webhookSecretConfigurado: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+        ultimoErroWebhook: null,
+        erro: `Telegram getMe falhou com status ${meResponse.status}`,
+      };
+    }
+
+    const meBody = (await meResponse.json()) as {
+      result?: { id: number; username?: string; first_name?: string };
+    };
+    const webhookBody = webhookResponse.ok
+      ? ((await webhookResponse.json()) as {
+          result?: { url?: string; last_error_message?: string };
+        })
+      : null;
+
+    return {
+      conectado: true,
+      botId: meBody.result?.id,
+      botUsername: meBody.result?.username,
+      botNome: meBody.result?.first_name,
+      webhookUrl: webhookBody?.result?.url || null,
+      webhookSecretConfigurado: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+      ultimoErroWebhook: webhookBody?.result?.last_error_message ?? null,
+    };
+  } catch (err) {
+    return {
+      conectado: false,
+      webhookUrl: null,
+      webhookSecretConfigurado: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+      ultimoErroWebhook: null,
+      erro: err instanceof Error ? err.message : String(err),
+    };
+  }
+}

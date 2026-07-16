@@ -2,22 +2,23 @@ import { useState } from "react";
 import type { ConversaResumo } from "./api";
 import { ConversaView } from "./components/ConversaView";
 import { Home } from "./components/Home";
-import { Modal } from "./components/Modal";
-import { ProvedoresView } from "./components/ProvedoresView";
+import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 
 export function App() {
   const [conversaSelecionada, setConversaSelecionada] = useState<ConversaResumo | null>(null);
   const [atualizarSinal, setAtualizarSinal] = useState(0);
-  const [configAberta, setConfigAberta] = useState(false);
+  const [configuracoesAbertas, setConfiguracoesAbertas] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(true);
 
   function handleNovaConversa() {
+    setConfiguracoesAbertas(false);
     setConversaSelecionada(null);
   }
 
   function handleConversaCriada(conversa: ConversaResumo) {
+    setConfiguracoesAbertas(false);
     setConversaSelecionada(conversa);
     setAtualizarSinal((n) => n + 1);
   }
@@ -27,10 +28,13 @@ export function App() {
       {sidebarAberta && (
         <Sidebar
           conversaSelecionadaId={conversaSelecionada?.id ?? null}
-          onSelecionar={setConversaSelecionada}
+          onSelecionar={(conversa) => {
+            setConfiguracoesAbertas(false);
+            setConversaSelecionada(conversa);
+          }}
           atualizarSinal={atualizarSinal}
           onNovaConversa={handleNovaConversa}
-          onAbrirConfig={() => setConfigAberta(true)}
+          onAbrirConfig={() => setConfiguracoesAbertas(true)}
           onFechar={() => setSidebarAberta(false)}
         />
       )}
@@ -43,7 +47,9 @@ export function App() {
         <TopBar sidebarAberta={sidebarAberta} onAbrirSidebar={() => setSidebarAberta(true)} onNovaConversa={handleNovaConversa} />
 
         <main className="flex min-h-0 flex-1 flex-col">
-          {conversaSelecionada ? (
+          {configuracoesAbertas ? (
+            <SettingsView onVoltar={() => setConfiguracoesAbertas(false)} />
+          ) : conversaSelecionada ? (
             <ConversaView
               key={conversaSelecionada.id}
               conversaId={conversaSelecionada.id}
@@ -55,12 +61,6 @@ export function App() {
           )}
         </main>
       </div>
-
-      {configAberta && (
-        <Modal titulo="Provedor de IA" onFechar={() => setConfigAberta(false)}>
-          <ProvedoresView />
-        </Modal>
-      )}
     </div>
   );
 }

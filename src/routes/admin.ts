@@ -23,7 +23,7 @@ import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
 import type { ContentPart } from "../lib/llm/types.js";
 import { salvarArquivo, streamArquivo } from "../lib/storage.js";
-import { sendTelegramMessage } from "../lib/telegram.js";
+import { getTelegramBotStatus, sendTelegramMessage } from "../lib/telegram.js";
 
 function tipoAnexoPorMime(mimeType: string): TipoAnexo {
   if (mimeType.startsWith("image/")) return "imagem";
@@ -124,6 +124,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ ok: false, erro: err instanceof Error ? err.message : String(err) });
     }
   });
+
+  app.get("/admin/api/telegram/status", async () => getTelegramBotStatus());
+
+  app.get("/admin/api/integracoes", async () => ({
+    groqConfigurado: Boolean(env.GROQ_API_KEY),
+    pluggyConfigurado: Boolean(env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET),
+  }));
 
   app.get("/admin/api/conversas", async () => listarConversas());
 
