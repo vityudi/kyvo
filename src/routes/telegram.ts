@@ -132,6 +132,21 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ ok: true });
     }
 
+    // Bot de uso pessoal: deny-by-default. So o chat_id configurado em
+    // owner_chat_id pode falar com o bot - inclusive antes da primeira
+    // configuracao (ownerChatId null bloqueia todo mundo, nao libera geral).
+    // Ignora (com uma resposta estatica, sem chamar o agente/LLM) qualquer
+    // chat_id diferente - antes de tocar em obterOuCriarUsuario, pra nao criar
+    // usuario/conta nenhum pra quem nao deveria estar falando com o bot.
+    if (message.chat.id !== telegramConfig.ownerChatId) {
+      logger.warn({ chatId: message.chat.id }, "mensagem recebida de chat nao autorizado - ignorada");
+      await sendTelegramMessageComRetentativa(
+        message.chat.id,
+        "Este bot é de uso pessoal e não está disponível para você.",
+      );
+      return reply.code(200).send({ ok: true });
+    }
+
     const usuario = await obterOuCriarUsuario(message.chat.id);
 
     if (message.text && COMANDOS_NOVA_CONVERSA.includes(message.text.trim())) {

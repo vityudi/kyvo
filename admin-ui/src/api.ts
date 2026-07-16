@@ -74,6 +74,7 @@ export function obterStatusTelegram(): Promise<TelegramStatus> {
 export interface TelegramConfigResumo {
   botTokenConfigurado: boolean;
   webhookSecretConfigurado: boolean;
+  ownerChatId: number | null;
   atualizadoEm: string;
 }
 
@@ -81,10 +82,14 @@ export function obterConfigTelegram(): Promise<TelegramConfigResumo> {
   return request("/admin/api/telegram/config");
 }
 
-export function salvarConfigTelegram(botToken?: string, webhookSecret?: string): Promise<ApiOk> {
+export function salvarConfigTelegram(
+  botToken?: string,
+  webhookSecret?: string,
+  ownerChatId?: number | null,
+): Promise<ApiOk> {
   return request("/admin/api/telegram/config", {
     method: "PUT",
-    body: JSON.stringify({ botToken: botToken || undefined, webhookSecret: webhookSecret || undefined }),
+    body: JSON.stringify({ botToken: botToken || undefined, webhookSecret: webhookSecret || undefined, ownerChatId }),
   });
 }
 

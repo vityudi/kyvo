@@ -1,3 +1,4 @@
+import { logger } from "../lib/logger.js";
 import { pool } from "./pool.js";
 
 export interface Conversa {
@@ -7,40 +8,17 @@ export interface Conversa {
   status: "ativa" | "arquivada";
 }
 
-/**
- * Retorna a conversa ativa do usuario, criando uma se ele ainda nao tiver
- * nenhuma (primeiro contato). Idempotente, mesmo espirito de
- * obterOuCriarUsuario em usuario.ts.
- */
-export async function obterOuCriarConversaAtiva(usuarioId: string): Promise<Conversa> {
-  const { rows } = await pool.query<{ id: string; usuario_id: string; titulo: string | null; status: "ativa" | "arquivada" }>(
-    "select id, usuario_id, titulo, status from conversa where usuario_id = $1 and status = 'ativa' limit 1",
-    [usuarioId],
-  );
-
-  const existente = rows[0];
-  if (existente) {
-    return { id: existente.id, usuarioId: existente.usuario_id, titulo: existente.titulo, status: existente.status };
-  }
-
-  const criada = await pool.query<{ id: string; usuario_id: string; titulo: string | null; status: "ativa" | "arquivada" }>(
-    "insert into conversa (usuario_id) values ($1) returning id, usuario_id, titulo, status",
-    [usuarioId],
-  );
-  const nova = criada.rows[0];
-  if (!nova) throw new Error("falha ao criar conversa - insert nao retornou linha");
-
-  return { id: nova.id, usuarioId: nova.usuario_id, titulo: nova.titulo, status: nova.status };
-}
+const LIMITE_INATIVIDADE_MS = 12 * 60 * 60 * 1000;
 
 /**
- * Arquiva a conversa ativa do usuario (se existir) e cria uma nova - o
- * "iniciar nova conversa" acionado pelo comando /nova no Telegram ou pelo
- * admin. So reseta o historico curto de chat (mensagem.conversa_id); o core
- * memory do usuario (orcamentos/metas/perfil/memoria_insight) continua
- * intacto, pois fica por usuario_id.
+ * Arquiva a conversa ativa do usuario (se existir) e cria uma nova - usado
+ * tanto pelo comando /nova/reset no Telegram/admin quanto pela expiracao
+ * automatica por inatividade em obterOuCriarConversaAtiva. So reseta o
+ * historico curto de chat (mensagem.conversa_id); o core memory do usuario
+ * (orcamentos/metas/perfil/memoria_insight) continua intacto, pois fica por
+ * usuario_id.
  */
-export async function iniciarNovaConversa(usuarioId: string): Promise<Conversa> {
+async function arquivarAtivaECriarNova(usuarioId: string): Promise<Conversa> {
   const client = await pool.connect();
 
   try {
@@ -68,6 +46,56 @@ export async function iniciarNovaConversa(usuarioId: string): Promise<Conversa> 
   } finally {
     client.release();
   }
+}
+
+/**
+ * Retorna a conversa ativa do usuario, criando uma se ele ainda nao tiver
+ * nenhuma (primeiro contato). Idempotente, mesmo espirito de
+ * obterOuCriarUsuario em usuario.ts. Se a conversa ativa estiver parada ha
+ * mais de LIMITE_INATIVIDADE_MS (atualizado_em e tocado a cada mensagem, ver
+ * tocarConversa em mensagem.ts), arquiva ela e comeca uma nova sozinha - o
+ * usuario nao precisa lembrar de mandar /nova pra "renovar a sessao" depois
+ * de um tempo sem falar com o bot.
+ */
+export async function obterOuCriarConversaAtiva(usuarioId: string): Promise<Conversa> {
+  const { rows } = await pool.query<{
+    id: string;
+    usuario_id: string;
+    titulo: string | null;
+    status: "ativa" | "arquivada";
+    atualizado_em: string;
+  }>("select id, usuario_id, titulo, status, atualizado_em from conversa where usuario_id = $1 and status = 'ativa' limit 1", [
+    usuarioId,
+  ]);
+
+  const existente = rows[0];
+  if (existente) {
+    const inativaDemais = Date.now() - new Date(existente.atualizado_em).getTime() > LIMITE_INATIVIDADE_MS;
+    if (!inativaDemais) {
+      return { id: existente.id, usuarioId: existente.usuario_id, titulo: existente.titulo, status: existente.status };
+    }
+
+    logger.info({ usuarioId, conversaId: existente.id }, "conversa expirou por inatividade - iniciando uma nova");
+    return arquivarAtivaECriarNova(usuarioId);
+  }
+
+  const criada = await pool.query<{ id: string; usuario_id: string; titulo: string | null; status: "ativa" | "arquivada" }>(
+    "insert into conversa (usuario_id) values ($1) returning id, usuario_id, titulo, status",
+    [usuarioId],
+  );
+  const nova = criada.rows[0];
+  if (!nova) throw new Error("falha ao criar conversa - insert nao retornou linha");
+
+  return { id: nova.id, usuarioId: nova.usuario_id, titulo: nova.titulo, status: nova.status };
+}
+
+/**
+ * Arquiva a conversa ativa do usuario (se existir) e cria uma nova - o
+ * "iniciar nova conversa" acionado pelo comando /nova no Telegram ou pelo
+ * admin.
+ */
+export async function iniciarNovaConversa(usuarioId: string): Promise<Conversa> {
+  return arquivarAtivaECriarNova(usuarioId);
 }
 
 /** Resolve usuario/telegram_chat_id a partir de uma conversa - usado pela rota admin de "enviar como usuario". */

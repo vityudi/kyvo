@@ -11,7 +11,8 @@ import { logger } from "./logger.js";
 import { executeTool, toolDefinitions } from "./tools.js";
 
 const MAX_TOOL_ITERATIONS = 6;
-const MAX_TOKENS = 1024;
+const MAX_TOKENS = 4096;
+const MAX_CONTINUACOES_MAX_TOKENS = 3;
 
 /**
  * Monta o "core memory" (FOUNDATION.md, secao 4.2, opcao 2): categorias
@@ -168,6 +169,8 @@ export async function processarMensagem(conversaId: string, usuarioId: string, t
   ];
 
   let textoResposta = "";
+  let textoAcumulado = "";
+  let continuacoesMaxTokens = 0;
 
   for (let iteracao = 0; iteracao < MAX_TOOL_ITERATIONS; iteracao++) {
     const resposta = await llm.createCompletion({
@@ -179,8 +182,22 @@ export async function processarMensagem(conversaId: string, usuarioId: string, t
 
     messages.push({ role: "assistant", content: resposta.content });
 
+    // O modelo bateu o limite de tokens no meio da resposta (ex.: uma tabela
+    // longa) - em vez de devolver o texto cortado como resposta final, pede
+    // pra continuar de onde parou e concatena, ate um limite de tentativas
+    // pra nao entrar em loop se o modelo insistir em respostas gigantes.
+    if (resposta.stopReason === "max_tokens" && continuacoesMaxTokens < MAX_CONTINUACOES_MAX_TOKENS) {
+      continuacoesMaxTokens++;
+      textoAcumulado += extrairTexto(resposta.content);
+      messages.push({
+        role: "user",
+        content: [{ type: "text", text: "Continue exatamente de onde parou, sem repetir o que ja foi dito." }],
+      });
+      continue;
+    }
+
     if (resposta.stopReason !== "tool_use") {
-      textoResposta = extrairTexto(resposta.content);
+      textoResposta = (textoAcumulado + extrairTexto(resposta.content)).trim();
       break;
     }
 

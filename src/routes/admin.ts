@@ -25,7 +25,12 @@ import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
 import type { ContentPart } from "../lib/llm/types.js";
 import { salvarArquivo, streamArquivo } from "../lib/storage.js";
-import { getTelegramBotStatus, sendTelegramMessageComRetentativa, setTelegramWebhook } from "../lib/telegram.js";
+import {
+  getTelegramBotStatus,
+  sendTelegramMessageComRetentativa,
+  setTelegramCommands,
+  setTelegramWebhook,
+} from "../lib/telegram.js";
 
 function tipoAnexoPorMime(mimeType: string): TipoAnexo {
   if (mimeType.startsWith("image/")) return "imagem";
@@ -131,14 +136,26 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/admin/api/telegram/config", async () => obterResumoTelegramConfig());
 
-  app.put<{ Body: { botToken?: string; webhookSecret?: string } }>(
+  app.put<{ Body: { botToken?: string; webhookSecret?: string; ownerChatId?: number | null } }>(
     "/admin/api/telegram/config",
     async (request, reply) => {
-      const { botToken, webhookSecret } = request.body;
-      if (!botToken && !webhookSecret) {
-        return reply.code(400).send({ ok: false, erro: "informe o bot token e/ou o secret do webhook" });
+      const { botToken, webhookSecret, ownerChatId } = request.body;
+      if (!botToken && !webhookSecret && ownerChatId === undefined) {
+        return reply.code(400).send({ ok: false, erro: "informe o bot token, o secret do webhook e/ou o chat autorizado" });
       }
-      await upsertTelegramConfig(botToken, webhookSecret);
+      await upsertTelegramConfig(botToken, webhookSecret, ownerChatId ?? null);
+
+      // So pra tornar /nova descobrivel no menu de comandos do Telegram -
+      // best-effort, um bot token novo/invalido nao deve impedir o salvamento
+      // da config em si.
+      if (botToken) {
+        try {
+          await setTelegramCommands();
+        } catch (err) {
+          app.log.warn({ err }, "falha ao registrar menu de comandos do Telegram");
+        }
+      }
+
       return { ok: true };
     },
   );
@@ -234,6 +251,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!texto && anexosParaPersistir.length === 0) {
       return reply.code(400).send({ ok: false, erro: "mensagem vazia" });
     }
+
+    // O bot nao consegue postar no Telegram "como se fosse" o usuario (limitacao
+    // da Bot API) - sem isso, quem manda mensagem pelo painel via essa mensagem
+    // nunca aparece no chat real do Telegram, so a resposta do assistente.
+    // Ecoa antes de processar para preservar a ordem (pergunta, depois resposta).
+    const partesEco: string[] = [];
+    if (texto) partesEco.push(texto);
+    if (anexosParaPersistir.length > 0) {
+      partesEco.push(`[${anexosParaPersistir.length} anexo(s) enviado(s) pelo painel]`);
+    }
+    await sendTelegramMessageComRetentativa(
+      conversa.telegramChatId,
+      `🖥️ Mensagem enviada pelo painel:\n${partesEco.join("\n")}`,
+    );
 
     let resposta: string;
     try {

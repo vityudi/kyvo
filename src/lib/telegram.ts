@@ -98,6 +98,35 @@ export async function setTelegramWebhook(webhookUrl: string): Promise<void> {
   }
 }
 
+/**
+ * Registra o menu de comandos ("/") do bot no app do Telegram - so pra tornar
+ * /nova descobrivel (o comando em si ja funciona sem isso, ver
+ * COMANDOS_NOVA_CONVERSA em routes/telegram.ts). /reset continua funcionando
+ * como alias nao listado, sem necessidade de aparecer no menu.
+ */
+export async function setTelegramCommands(): Promise<void> {
+  const config = await getTelegramConfig();
+  if (!config) throw new TelegramNaoConfiguradoError();
+
+  const url = `${TELEGRAM_API_BASE}/bot${config.botToken}/setMyCommands`;
+  const body = {
+    commands: [
+      { command: "nova", description: "Começar uma conversa nova (mantém orçamentos, metas e perfil)" },
+    ],
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const responseBody = (await response.json()) as { ok?: boolean; description?: string };
+  if (!response.ok || !responseBody.ok) {
+    throw new Error(responseBody.description ?? `Telegram setMyCommands falhou com status ${response.status}`);
+  }
+}
+
 /** Formato minimo de um update do Telegram - so os campos usados hoje. */
 export interface TelegramUpdate {
   update_id: number;

@@ -101,6 +101,7 @@ function TelegramConfigForm({ onSalvo }: { onSalvo: () => void }) {
   const [config, setConfig] = useState<TelegramConfigResumo | null>(null);
   const [botToken, setBotToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
+  const [ownerChatId, setOwnerChatId] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [registrando, setRegistrando] = useState(false);
@@ -108,7 +109,9 @@ function TelegramConfigForm({ onSalvo }: { onSalvo: () => void }) {
 
   async function carregarConfig() {
     try {
-      setConfig(await obterConfigTelegram());
+      const resultado = await obterConfigTelegram();
+      setConfig(resultado);
+      setOwnerChatId(resultado.ownerChatId != null ? String(resultado.ownerChatId) : "");
     } catch {
       // status geral ja mostra o erro de carregamento acima
     }
@@ -122,7 +125,8 @@ function TelegramConfigForm({ onSalvo }: { onSalvo: () => void }) {
     setSalvando(true);
     setStatusMsg(null);
     try {
-      await salvarConfigTelegram(botToken, webhookSecret);
+      const ownerChatIdValor = ownerChatId.trim() ? Number(ownerChatId.trim()) : null;
+      await salvarConfigTelegram(botToken, webhookSecret, ownerChatIdValor);
       setBotToken("");
       setWebhookSecret("");
       setStatusMsg({ tipo: "ok", texto: "Configuração salva." });
@@ -186,11 +190,33 @@ function TelegramConfigForm({ onSalvo }: { onSalvo: () => void }) {
         />
       </div>
 
+      <div className="mb-3.5 flex flex-col gap-1">
+        <label htmlFor="telegram-owner-chat-id" className="text-[12.5px] font-semibold text-text-secondary">
+          Chat autorizado
+        </label>
+        <input
+          id="telegram-owner-chat-id"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={ownerChatId}
+          onChange={(e) => setOwnerChatId(e.target.value)}
+          placeholder="ex.: 123456789"
+          className="rounded-[10px] border border-border-subtle bg-input-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+        />
+        <p className="text-xs text-text-tertiary">
+          O bot só responde para esse chat_id do Telegram - qualquer outro recebe uma mensagem educada de
+          recusa, sem gastar tokens de IA e sem criar conta. Enquanto este campo estiver vazio, ninguém
+          recebe resposta, nem você. Para descobrir seu próprio chat_id na primeira configuração, mande uma
+          mensagem para o bot e confira o log do servidor (ele registra o chat_id de toda tentativa recebida).
+        </p>
+      </div>
+
       <div className="mb-4 flex items-center gap-2">
         <button
           className="rounded-[10px] bg-accent px-4 py-2.5 text-[12.5px] font-semibold text-accent-contrast transition hover:brightness-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={handleSalvar}
-          disabled={salvando || (!botToken && !webhookSecret)}
+          disabled={salvando || (!botToken && !webhookSecret && ownerChatId === (config?.ownerChatId != null ? String(config.ownerChatId) : ""))}
         >
           {salvando ? "Salvando…" : "Salvar"}
         </button>

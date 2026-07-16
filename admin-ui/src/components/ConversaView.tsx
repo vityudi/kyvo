@@ -37,6 +37,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
   const scrollRef = useRef<HTMLDivElement>(null);
   const alturaAnterior = useRef<number | null>(null);
   const inputArquivoRef = useRef<HTMLInputElement>(null);
+  const enviandoRef = useRef(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -67,6 +68,11 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
 
   useEffect(() => {
     const intervalo = setInterval(async () => {
+      // Enquanto handleEnviar esta em voo (aguardando o agente processar o
+      // turno), pular o poll evita misturar a mensagem otimista com a
+      // mensagem real ja persistida (mesmo conteudo, id diferente) - o
+      // proprio handleEnviar faz o fetch + merge autoritativo ao terminar.
+      if (enviandoRef.current) return;
       try {
         const recentes = await carregarMensagens(conversaId);
         setMensagens((atual) => mesclarMensagens(atual, recentes));
@@ -118,6 +124,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
     const arquivoEnviado = arquivo;
     setArquivo(null);
     setEnviando(true);
+    enviandoRef.current = true;
     setErroEnvio(null);
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -138,6 +145,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
       setArquivo(arquivoEnviado);
     } finally {
       setEnviando(false);
+      enviandoRef.current = false;
     }
   }
 
