@@ -17,6 +17,7 @@
     "seed:conhecimento": "tsx src/db/seedBaseConhecimento.ts",
     "seed:llm-config": "tsx src/db/seedLlmConfig.ts",
     "seed:telegram-config": "tsx src/db/seedTelegramConfig.ts",
+    "seed:groq-config": "tsx src/db/seedGroqConfig.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

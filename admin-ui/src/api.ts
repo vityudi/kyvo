@@ -18,8 +18,12 @@ interface ApiErro {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // FormData define seu proprio Content-Type (com boundary) - nao sobrescrever.
-  const headers = init?.body instanceof FormData ? init.headers : { "Content-Type": "application/json", ...init?.headers };
+  // Content-Type so faz sentido quando ha corpo - com ele setado e body vazio
+  // (ex.: POST de acao sem payload), o Fastify rejeita com
+  // FST_ERR_CTP_EMPTY_JSON_BODY antes de chegar na rota. FormData tambem
+  // define seu proprio Content-Type (com boundary) - nao sobrescrever.
+  const headers =
+    !init?.body || init.body instanceof FormData ? init?.headers : { "Content-Type": "application/json", ...init?.headers };
 
   const resposta = await fetch(path, { ...init, headers });
 
@@ -92,12 +96,27 @@ export function registrarWebhookTelegram(url: string): Promise<ApiOk | ApiErro> 
 }
 
 export interface IntegracoesStatus {
-  groqConfigurado: boolean;
   pluggyConfigurado: boolean;
 }
 
 export function obterIntegracoes(): Promise<IntegracoesStatus> {
   return request("/admin/api/integracoes");
+}
+
+export interface GroqConfigResumo {
+  apiKeyConfigurada: boolean;
+  atualizadoEm: string;
+}
+
+export function obterConfigGroq(): Promise<GroqConfigResumo> {
+  return request("/admin/api/groq/config");
+}
+
+export function salvarConfigGroq(apiKey: string): Promise<ApiOk> {
+  return request("/admin/api/groq/config", {
+    method: "PUT",
+    body: JSON.stringify({ apiKey }),
+  });
 }
 
 export interface ConversaResumo {

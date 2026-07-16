@@ -46,7 +46,11 @@ export function TopBar({
     obterStatusTelegram()
       .then((s) => setTelegramConectado(s.conectado))
       .catch(() => setTelegramConectado(false));
-  }, []);
+    // Refaz a busca sempre que sai da tela de config - ativar um provedor ou
+    // reconectar o Telegram nao dispara nenhum evento pro TopBar, entao sem
+    // isso o indicador ficava preso no estado do primeiro carregamento ate
+    // um reload de pagina.
+  }, [tela]);
 
   useEffect(() => {
     if (!dropdownAberto) return;

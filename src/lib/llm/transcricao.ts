@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { toFile } from "openai/uploads";
-import { env } from "../../config/env.js";
+import { getGroqApiKey } from "../../db/groqConfig.js";
 import { logger } from "../logger.js";
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
@@ -13,15 +13,16 @@ const GROQ_WHISPER_MODEL = "whisper-large-v3-turbo";
  * neste projeto aceita audio bruto como input, entao esse passo e sempre
  * necessario antes de dar o conteudo falado pro agente.
  *
- * Retorna null (nunca lanca) quando GROQ_API_KEY nao esta configurada, ou se
- * a chamada falhar - a mensagem de audio ainda fica salva como anexo, so sem
- * o texto transcrito chegando ao agente.
+ * Retorna null (nunca lanca) quando a chave da Groq nao esta configurada em
+ * /admin, ou se a chamada falhar - a mensagem de audio ainda fica salva como
+ * anexo, so sem o texto transcrito chegando ao agente.
  */
 export async function transcreverAudio(buffer: Buffer, mimeType: string): Promise<string | null> {
-  if (!env.GROQ_API_KEY) return null;
+  const apiKey = await getGroqApiKey();
+  if (!apiKey) return null;
 
   try {
-    const client = new OpenAI({ apiKey: env.GROQ_API_KEY, baseURL: GROQ_BASE_URL });
+    const client = new OpenAI({ apiKey, baseURL: GROQ_BASE_URL });
     const arquivo = await toFile(buffer, `audio${extensaoParaMime(mimeType)}`, { type: mimeType });
 
     const resposta = await client.audio.transcriptions.create({

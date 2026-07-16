@@ -15,6 +15,7 @@ import {
   upsertProvedor,
   type LlmProvider,
 } from "../db/llmConfig.js";
+import { obterResumoGroqConfig, upsertGroqConfig } from "../db/groqConfig.js";
 import { carregarMensagensPaginado } from "../db/mensagem.js";
 import { obterResumoTelegramConfig, upsertTelegramConfig } from "../db/telegramConfig.js";
 import type { AnexoPendente, TurnoUsuario } from "../lib/agent.js";
@@ -157,8 +158,18 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  app.get("/admin/api/groq/config", async () => obterResumoGroqConfig());
+
+  app.put<{ Body: { apiKey?: string } }>("/admin/api/groq/config", async (request, reply) => {
+    const { apiKey } = request.body;
+    if (!apiKey) {
+      return reply.code(400).send({ ok: false, erro: "informe a API key da Groq" });
+    }
+    await upsertGroqConfig(apiKey);
+    return { ok: true };
+  });
+
   app.get("/admin/api/integracoes", async () => ({
-    groqConfigurado: Boolean(env.GROQ_API_KEY),
     pluggyConfigurado: Boolean(env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET),
   }));
 

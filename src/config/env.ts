@@ -40,10 +40,10 @@ const envSchema = z.object({
   UPLOADS_DIR: z.string().default("./uploads"),
   MAX_ANEXO_BYTES: z.coerce.number().int().positive().default(15 * 1024 * 1024),
 
-  // Transcricao de audio (voz do Telegram) via Groq/Whisper - opcional: sem
-  // a chave, o audio ainda e salvo como anexo mas nao chega como texto pro
-  // agente (ver src/lib/llm/transcricao.ts).
-  GROQ_API_KEY: z.string().optional(),
+  // Bootstrap opcional (dev local): seeda a chave da Groq (transcricao) no
+  // primeiro boot via `npm run seed:groq-config`. Nao e lido em nenhum
+  // caminho de request normal - a transcricao le sempre do banco.
+  GROQ_API_KEY_BOOTSTRAP: z.string().optional(),
 
   // Bootstrap opcional (dev local): seeda o provedor Anthropic no primeiro
   // boot via `npm run seed:llm-config`. Nao e lido em nenhum caminho de
