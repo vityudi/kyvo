@@ -23,8 +23,10 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{64}$/i, "CONFIG_ENCRYPTION_KEY deve ter 64 caracteres hex (32 bytes)"),
 
-  // Senha do painel /admin (usuario fixo "admin", HTTP Basic Auth).
-  ADMIN_PASSWORD: z.string().min(8, "ADMIN_PASSWORD e obrigatoria - veja .env.example"),
+  // Senha do painel /admin (usuario fixo "admin", HTTP Basic Auth). Sem
+  // exigencia de tamanho minimo por escolha do time - troque por algo mais
+  // forte antes de expor o painel fora de localhost.
+  ADMIN_PASSWORD: z.string().min(1, "ADMIN_PASSWORD e obrigatoria - veja .env.example"),
 
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN e obrigatoria - veja .env.example"),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
