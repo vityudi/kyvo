@@ -1,16 +1,36 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ChatsCircle, GearSix } from "@phosphor-icons/react";
+import { criarConversa, type ConversaResumo } from "./api";
+import { AppHeader } from "./components/AppHeader";
 import { ConversasSidebar } from "./components/ConversasSidebar";
 import { ConversaView } from "./components/ConversaView";
+import { Modal } from "./components/Modal";
 import { ProvedoresView } from "./components/ProvedoresView";
-import type { ConversaResumo } from "./api";
-
-type View = "conversas" | "provedores";
 
 export function App() {
-  const [view, setView] = useState<View>("conversas");
   const [conversaSelecionada, setConversaSelecionada] = useState<ConversaResumo | null>(null);
   const [atualizarSinal, setAtualizarSinal] = useState(0);
+  const [configAberta, setConfigAberta] = useState(false);
+  const [criandoConversa, setCriandoConversa] = useState(false);
+
+  async function handleNovaConversa() {
+    if (!conversaSelecionada || criandoConversa) return;
+    setCriandoConversa(true);
+    try {
+      const nova = await criarConversa(conversaSelecionada.usuarioId);
+      setConversaSelecionada({
+        ...nova,
+        telegramChatId: conversaSelecionada.telegramChatId,
+        ultimaMensagem: null,
+        ultimaRole: null,
+        ultimaEm: new Date().toISOString(),
+        totalMensagens: 0,
+      });
+      setAtualizarSinal((n) => n + 1);
+    } finally {
+      setCriandoConversa(false);
+    }
+  }
 
   return (
     <div className="flex h-[100dvh] bg-bg">
@@ -18,74 +38,63 @@ export function App() {
         <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-contrast">
           K
         </div>
-        <NavButton
-          label="Conversas"
-          ativo={view === "conversas"}
-          onClick={() => setView("conversas")}
-          icon={<ChatsCircle size={20} weight={view === "conversas" ? "fill" : "regular"} />}
-        />
-        <NavButton
-          label="Provedores"
-          ativo={view === "provedores"}
-          onClick={() => setView("provedores")}
-          icon={<GearSix size={20} weight={view === "provedores" ? "fill" : "regular"} />}
-        />
+        <button
+          disabled
+          aria-label="Conversas"
+          title="Conversas"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent"
+        >
+          <ChatsCircle size={20} weight="fill" />
+        </button>
+        <button
+          onClick={() => setConfigAberta(true)}
+          aria-label="Configurar provedor de IA"
+          title="Configurar provedor de IA"
+          className="mt-auto flex h-10 w-10 items-center justify-center rounded-xl text-text-secondary transition hover:bg-surface-sunken"
+        >
+          <GearSix size={20} />
+        </button>
       </nav>
 
-      {view === "conversas" && (
-        <div className="w-80 shrink-0 border-r border-border">
-          <ConversasSidebar
-            usuarioSelecionadoId={conversaSelecionada?.usuarioId ?? null}
-            onSelecionar={setConversaSelecionada}
-            atualizarSinal={atualizarSinal}
-          />
-        </div>
-      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AppHeader
+          podeIniciarConversa={conversaSelecionada !== null}
+          criandoConversa={criandoConversa}
+          onNovaConversa={handleNovaConversa}
+        />
 
-      <main className="min-w-0 flex-1">
-        {view === "conversas" ? (
-          conversaSelecionada ? (
-            <ConversaView
-              key={conversaSelecionada.usuarioId}
-              usuarioId={conversaSelecionada.usuarioId}
-              telegramChatId={conversaSelecionada.telegramChatId}
-              onMensagemEnviada={() => setAtualizarSinal((n) => n + 1)}
+        <div className="flex min-h-0 flex-1">
+          <div className="w-80 shrink-0 border-r border-border">
+            <ConversasSidebar
+              conversaSelecionadaId={conversaSelecionada?.id ?? null}
+              onSelecionar={setConversaSelecionada}
+              atualizarSinal={atualizarSinal}
             />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <ChatsCircle size={32} className="text-text-secondary" />
-              <p className="text-sm text-text-secondary">Selecione uma conversa para visualizar</p>
-            </div>
-          )
-        ) : (
-          <ProvedoresView />
-        )}
-      </main>
-    </div>
-  );
-}
+          </div>
 
-function NavButton({
-  label,
-  ativo,
-  onClick,
-  icon,
-}: {
-  label: string;
-  ativo: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
-        ativo ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-surface-sunken"
-      }`}
-    >
-      {icon}
-    </button>
+          <main className="flex min-w-0 flex-1 flex-col">
+            {conversaSelecionada ? (
+              <ConversaView
+                key={conversaSelecionada.id}
+                conversaId={conversaSelecionada.id}
+                telegramChatId={conversaSelecionada.telegramChatId}
+                onMensagemEnviada={() => setAtualizarSinal((n) => n + 1)}
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                <ChatsCircle size={32} className="text-text-secondary" />
+                <p className="text-sm text-text-secondary">Selecione uma conversa para visualizar</p>
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
+
+      {configAberta && (
+        <Modal titulo="Provedor de IA" onFechar={() => setConfigAberta(false)}>
+          <ProvedoresView />
+        </Modal>
+      )}
+    </div>
   );
 }

@@ -15,6 +15,18 @@ export function createAnthropicClient(apiKey: string, model: string): LlmClient 
         content: m.content.map((part): Anthropic.ContentBlockParam => {
           if (part.type === "text") return { type: "text", text: part.text };
           if (part.type === "tool_use") return { type: "tool_use", id: part.id, name: part.name, input: part.input };
+          if (part.type === "image") {
+            return {
+              type: "image",
+              source: { type: "base64", media_type: part.mimeType as "image/jpeg", data: part.data },
+            };
+          }
+          if (part.type === "document") {
+            return {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: part.data },
+            };
+          }
           return { type: "tool_result", tool_use_id: part.toolUseId, content: part.content, is_error: part.isError };
         }),
       }));

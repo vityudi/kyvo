@@ -20,7 +20,14 @@ export interface ToolDefinition {
 export type ContentPart =
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
-  | { type: "tool_result"; toolUseId: string; content: string; isError: boolean };
+  | { type: "tool_result"; toolUseId: string; content: string; isError: boolean }
+  // base64. Suportado nativamente so pela Anthropic (visao) - o client do
+  // DeepSeek traduz para um placeholder em texto, ja que o modelo nao aceita
+  // imagem/documento binario.
+  | { type: "image"; mimeType: string; data: string }
+  // media_type deve ser "application/pdf" - e o unico formato de documento
+  // que o bloco nativo da Anthropic aceita.
+  | { type: "document"; mimeType: string; data: string; nome?: string };
 
 export interface ChatMessage {
   role: "user" | "assistant";

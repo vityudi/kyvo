@@ -15,6 +15,9 @@ npm-debug.log*
 # Dados locais de infra (docker compose)
 .postgres-data/
 
+# Anexos de mensagem enviados via Telegram/admin (filesystem local, ver src/lib/storage.ts)
+/uploads/
+
 # Editor / SO
 .DS_Store
 .vscode/

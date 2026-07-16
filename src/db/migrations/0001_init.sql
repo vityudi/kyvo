@@ -29,6 +29,27 @@ create table conta (
 create index idx_conta_usuario on conta (usuario_id);
 
 -- ---------------------------------------------------------------------------
+-- Conversas (threads de chat)
+-- Cada usuario pode ter varias conversas ao longo do tempo, mas so uma
+-- 'ativa' por vez (indice unico parcial, mesmo padrao de idx_llm_provedor_ativo
+-- mais abaixo). "Iniciar nova conversa" arquiva a ativa e cria outra - reseta
+-- so o contexto curto de chat (mensagem.conversa_id), nunca o core memory
+-- (orcamentos/metas/perfil/memoria_insight), que continua por usuario_id.
+-- ---------------------------------------------------------------------------
+
+create table conversa (
+    id              uuid primary key default gen_random_uuid(),
+    usuario_id      uuid not null references usuario(id) on delete cascade,
+    titulo          text,
+    status          text not null default 'ativa' check (status in ('ativa', 'arquivada')),
+    criado_em       timestamptz not null default now(),
+    atualizado_em   timestamptz not null default now()
+);
+
+create index idx_conversa_usuario on conversa (usuario_id, atualizado_em desc);
+create unique index idx_conversa_ativa on conversa (usuario_id) where status = 'ativa';
+
+-- ---------------------------------------------------------------------------
 -- Categorias
 -- usuario_id nulo = categoria padrao, disponivel para todos os usuarios.
 -- ---------------------------------------------------------------------------
@@ -231,14 +252,39 @@ create index idx_base_conhecimento_busca on base_conhecimento using gin (busca);
 -- ---------------------------------------------------------------------------
 
 create table mensagem (
-    id          uuid primary key default gen_random_uuid(),
-    usuario_id  uuid not null references usuario(id) on delete cascade,
-    role        text not null check (role in ('user', 'assistant')),
-    conteudo    text not null,
-    criado_em   timestamptz not null default now()
+    id           uuid primary key default gen_random_uuid(),
+    usuario_id   uuid not null references usuario(id) on delete cascade,
+    -- Denormalizado ao lado de usuario_id (mesmo padrao de transacao.categoria)
+    -- para nao exigir join em toda query de historico/paginacao.
+    conversa_id  uuid references conversa(id) on delete cascade,
+    role         text not null check (role in ('user', 'assistant')),
+    conteudo     text not null,
+    criado_em    timestamptz not null default now()
 );
 
 create index idx_mensagem_usuario_criado on mensagem (usuario_id, criado_em);
+create index idx_mensagem_conversa_criado on mensagem (conversa_id, criado_em);
+
+-- ---------------------------------------------------------------------------
+-- Anexos de mensagem (imagem/audio/documento). transcricao so e preenchida
+-- para tipo = 'audio' (Claude/DeepSeek nao aceitam audio bruto - ver
+-- src/lib/llm/transcricao.ts).
+-- ---------------------------------------------------------------------------
+
+create table anexo (
+    id                     uuid primary key default gen_random_uuid(),
+    mensagem_id            uuid not null references mensagem(id) on delete cascade,
+    tipo                   text not null check (tipo in ('imagem', 'audio', 'documento')),
+    mime_type              text not null,
+    nome_arquivo           text,
+    caminho_armazenamento  text not null,
+    tamanho_bytes          integer,
+    telegram_file_id       text,
+    transcricao            text,
+    criado_em              timestamptz not null default now()
+);
+
+create index idx_anexo_mensagem on anexo (mensagem_id);
 
 -- ---------------------------------------------------------------------------
 -- Dedupe de alertas proativos (FOUNDATION.md, decisao #2) - garante que o

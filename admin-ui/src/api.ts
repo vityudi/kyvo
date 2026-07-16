@@ -18,10 +18,10 @@ interface ApiErro {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const resposta = await fetch(path, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
+  // FormData define seu proprio Content-Type (com boundary) - nao sobrescrever.
+  const headers = init?.body instanceof FormData ? init.headers : { "Content-Type": "application/json", ...init?.headers };
+
+  const resposta = await fetch(path, { ...init, headers });
 
   if (!resposta.ok) {
     const corpo = (await resposta.json().catch(() => null)) as ApiErro | null;
@@ -53,12 +53,26 @@ export function testarProvedor(provider: LlmProvider): Promise<ApiOk | ApiErro> 
 }
 
 export interface ConversaResumo {
+  id: string;
   usuarioId: string;
   telegramChatId: number;
-  ultimaMensagem: string;
-  ultimaRole: "user" | "assistant";
+  titulo: string | null;
+  status: "ativa" | "arquivada";
+  ultimaMensagem: string | null;
+  ultimaRole: "user" | "assistant" | null;
   ultimaEm: string;
   totalMensagens: number;
+}
+
+export type TipoAnexo = "imagem" | "audio" | "documento";
+
+export interface Anexo {
+  id: string;
+  tipo: TipoAnexo;
+  mimeType: string;
+  nomeArquivo: string | null;
+  tamanhoBytes: number | null;
+  transcricao: string | null;
 }
 
 export interface MensagemAdmin {
@@ -66,21 +80,44 @@ export interface MensagemAdmin {
   role: "user" | "assistant";
   conteudo: string;
   criadoEm: string;
+  anexos: Anexo[];
+}
+
+export interface Conversa {
+  id: string;
+  usuarioId: string;
+  titulo: string | null;
+  status: "ativa" | "arquivada";
 }
 
 export function listarConversas(): Promise<ConversaResumo[]> {
   return request("/admin/api/conversas");
 }
 
-export function carregarMensagens(usuarioId: string, antes?: string, limite = 50): Promise<MensagemAdmin[]> {
-  const params = new URLSearchParams({ limite: String(limite) });
-  if (antes) params.set("antes", antes);
-  return request(`/admin/api/conversas/${usuarioId}/mensagens?${params}`);
+export function criarConversa(usuarioId: string): Promise<Conversa> {
+  return request(`/admin/api/usuarios/${usuarioId}/conversas`, { method: "POST" });
 }
 
-export function enviarMensagem(usuarioId: string, texto: string): Promise<{ resposta: string }> {
-  return request(`/admin/api/conversas/${usuarioId}/mensagens`, {
+export function carregarMensagens(conversaId: string, antes?: string, limite = 50): Promise<MensagemAdmin[]> {
+  const params = new URLSearchParams({ limite: String(limite) });
+  if (antes) params.set("antes", antes);
+  return request(`/admin/api/conversas/${conversaId}/mensagens?${params}`);
+}
+
+export function enviarMensagem(conversaId: string, texto: string, arquivo?: File): Promise<{ resposta: string }> {
+  if (arquivo) {
+    const formData = new FormData();
+    formData.set("texto", texto);
+    formData.set("arquivo", arquivo);
+    return request(`/admin/api/conversas/${conversaId}/mensagens`, { method: "POST", body: formData });
+  }
+
+  return request(`/admin/api/conversas/${conversaId}/mensagens`, {
     method: "POST",
     body: JSON.stringify({ texto }),
   });
+}
+
+export function urlAnexo(anexoId: string): string {
+  return `/admin/api/anexos/${anexoId}`;
 }

@@ -4,12 +4,12 @@ import { listarConversas, type ConversaResumo } from "../api";
 import { formatarTempoRelativo } from "../lib/tempo";
 
 interface Props {
-  usuarioSelecionadoId: string | null;
+  conversaSelecionadaId: string | null;
   onSelecionar: (conversa: ConversaResumo) => void;
   atualizarSinal: number;
 }
 
-export function ConversasSidebar({ usuarioSelecionadoId, onSelecionar, atualizarSinal }: Props) {
+export function ConversasSidebar({ conversaSelecionadaId, onSelecionar, atualizarSinal }: Props) {
   const [conversas, setConversas] = useState<ConversaResumo[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
@@ -87,9 +87,9 @@ export function ConversasSidebar({ usuarioSelecionadoId, onSelecionar, atualizar
         {filtradas && filtradas.length > 0 && (
           <ul className="flex flex-col gap-0.5 p-2">
             {filtradas.map((c) => {
-              const ativa = c.usuarioId === usuarioSelecionadoId;
+              const ativa = c.id === conversaSelecionadaId;
               return (
-                <li key={c.usuarioId}>
+                <li key={c.id}>
                   <button
                     onClick={() => onSelecionar(c)}
                     className={`flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left transition ${
@@ -106,7 +106,12 @@ export function ConversasSidebar({ usuarioSelecionadoId, onSelecionar, atualizar
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-medium text-text-primary">
-                          Usuário #{c.telegramChatId}
+                          {c.titulo ?? `Usuário #${c.telegramChatId}`}
+                          {c.status === "arquivada" && (
+                            <span className="ml-1.5 align-middle text-[10px] font-normal text-text-secondary">
+                              arquivada
+                            </span>
+                          )}
                         </p>
                         <span className="shrink-0 text-[11px] text-text-secondary">
                           {formatarTempoRelativo(c.ultimaEm)}
@@ -114,7 +119,7 @@ export function ConversasSidebar({ usuarioSelecionadoId, onSelecionar, atualizar
                       </div>
                       <p className="truncate text-xs text-text-secondary">
                         {c.ultimaRole === "assistant" ? "Kyvo: " : ""}
-                        {c.ultimaMensagem}
+                        {c.ultimaMensagem ?? "Sem mensagens ainda"}
                       </p>
                     </div>
                   </button>

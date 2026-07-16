@@ -2,9 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyBasicAuth from "@fastify/basic-auth";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import type { FastifyInstance } from "fastify";
 import { env } from "../config/env.js";
+import { obterAnexoParaDownload, type TipoAnexo } from "../db/anexo.js";
+import { iniciarNovaConversa, listarConversas, obterConversaComUsuario } from "../db/conversa.js";
 import {
   ativarProvedor,
   listarProvedores,
@@ -12,13 +15,21 @@ import {
   upsertProvedor,
   type LlmProvider,
 } from "../db/llmConfig.js";
-import { carregarMensagensPaginado, listarConversas } from "../db/mensagem.js";
-import { obterUsuarioPorId } from "../db/usuario.js";
+import { carregarMensagensPaginado } from "../db/mensagem.js";
+import type { AnexoPendente, TurnoUsuario } from "../lib/agent.js";
 import { processarMensagem } from "../lib/agent.js";
 import { createAnthropicClient } from "../lib/llm/anthropicClient.js";
 import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
+import type { ContentPart } from "../lib/llm/types.js";
+import { salvarArquivo, streamArquivo } from "../lib/storage.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
+
+function tipoAnexoPorMime(mimeType: string): TipoAnexo {
+  if (mimeType.startsWith("image/")) return "imagem";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "documento";
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -43,19 +54,24 @@ function validate(
 }
 
 /**
- * Painel de administracao (/admin) para escolher/configurar o provedor de
- * LLM ativo (Anthropic/DeepSeek) em runtime, sem depender de env vars nem
- * redeploy. Protegido por HTTP Basic Auth em todas as rotas, incluindo os
- * arquivos estaticos da SPA - so registrado no processo `app` (server.ts),
- * o worker nao tem superficie HTTP.
+ * Painel de administracao - SPA de conversas/config de provedor de LLM,
+ * servida na raiz (/) para acesso direto. Protegido por HTTP Basic Auth em
+ * todas as rotas, incluindo os arquivos estaticos da SPA - so registrado no
+ * processo `app` (server.ts), o worker nao tem superficie HTTP. As rotas
+ * `/health` e `/webhook/telegram`, registradas fora deste plugin, continuam
+ * sem autenticacao (hook `onRequest` e escopado a este plugin).
  */
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   await app.register(fastifyBasicAuth, { validate, authenticate: true });
   app.addHook("onRequest", app.basicAuth);
 
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: env.MAX_ANEXO_BYTES, files: 1 },
+  });
+
   await app.register(fastifyStatic, {
-    root: join(__dirname, "../../admin-ui-dist"),
-    prefix: "/admin/",
+    root: join(__dirname, "../../admin-ui/dist"),
+    prefix: "/",
   });
 
   app.get("/admin/api/providers", async () => listarProvedores());
@@ -111,34 +127,90 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/admin/api/conversas", async () => listarConversas());
 
-  app.get<{ Params: { usuarioId: string }; Querystring: { antes?: string; limite?: string } }>(
-    "/admin/api/conversas/:usuarioId/mensagens",
+  app.post<{ Params: { usuarioId: string } }>("/admin/api/usuarios/:usuarioId/conversas", async (request) =>
+    iniciarNovaConversa(request.params.usuarioId),
+  );
+
+  app.get<{ Params: { conversaId: string }; Querystring: { antes?: string; limite?: string } }>(
+    "/admin/api/conversas/:conversaId/mensagens",
     async (request) => {
-      const { usuarioId } = request.params;
+      const { conversaId } = request.params;
       const { antes, limite } = request.query;
-      return carregarMensagensPaginado(usuarioId, antes, limite ? Number(limite) : undefined);
+      return carregarMensagensPaginado(conversaId, antes, limite ? Number(limite) : undefined);
     },
   );
 
-  app.post<{ Params: { usuarioId: string }; Body: { texto: string } }>(
-    "/admin/api/conversas/:usuarioId/mensagens",
-    async (request, reply) => {
-      const usuario = await obterUsuarioPorId(request.params.usuarioId);
-      if (!usuario) {
-        return reply.code(404).send({ ok: false, erro: "usuario nao encontrado" });
-      }
+  app.post<{ Params: { conversaId: string } }>("/admin/api/conversas/:conversaId/mensagens", async (request, reply) => {
+    const conversa = await obterConversaComUsuario(request.params.conversaId);
+    if (!conversa) {
+      return reply.code(404).send({ ok: false, erro: "conversa nao encontrada" });
+    }
 
-      try {
-        const resposta = await processarMensagem(usuario.id, request.body.texto);
-        await sendTelegramMessage(usuario.telegram_chat_id, resposta);
-        return { ok: true, resposta };
-      } catch (err) {
-        const erro =
-          err instanceof LlmNaoConfiguradoError
-            ? "Ainda não estou configurado — configure um provedor de IA nesta página."
-            : "Deu um erro processando essa mensagem.";
-        return reply.code(502).send({ ok: false, erro });
+    let texto = "";
+    const conteudoParaLlm: ContentPart[] = [];
+    const anexosParaPersistir: AnexoPendente[] = [];
+
+    if (request.isMultipart()) {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "field" && part.fieldname === "texto") {
+          texto = String(part.value);
+          continue;
+        }
+        if (part.type === "file") {
+          const buffer = await part.toBuffer();
+          const mimeType = part.mimetype || "application/octet-stream";
+          const salvo = await salvarArquivo(buffer, mimeType);
+          const tipo = tipoAnexoPorMime(mimeType);
+
+          if (tipo === "imagem") {
+            conteudoParaLlm.push({ type: "image", mimeType, data: buffer.toString("base64") });
+          } else if (mimeType === "application/pdf") {
+            conteudoParaLlm.push({ type: "document", mimeType, data: buffer.toString("base64"), nome: part.filename });
+          }
+
+          anexosParaPersistir.push({
+            tipo,
+            mimeType,
+            nomeArquivo: part.filename,
+            caminhoArmazenamento: salvo.caminho,
+            tamanhoBytes: salvo.tamanhoBytes,
+          });
+        }
       }
-    },
-  );
+    } else {
+      const body = request.body as { texto?: string } | undefined;
+      texto = body?.texto ?? "";
+    }
+
+    if (!texto && anexosParaPersistir.length === 0) {
+      return reply.code(400).send({ ok: false, erro: "mensagem vazia" });
+    }
+
+    try {
+      const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir };
+      const resposta = await processarMensagem(conversa.id, conversa.usuarioId, turno);
+      await sendTelegramMessage(conversa.telegramChatId, resposta);
+      return { ok: true, resposta };
+    } catch (err) {
+      const erro =
+        err instanceof LlmNaoConfiguradoError
+          ? "Ainda não estou configurado — configure um provedor de IA nesta página."
+          : "Deu um erro processando essa mensagem.";
+      return reply.code(502).send({ ok: false, erro });
+    }
+  });
+
+  app.get<{ Params: { anexoId: string } }>("/admin/api/anexos/:anexoId", async (request, reply) => {
+    const anexo = await obterAnexoParaDownload(request.params.anexoId);
+    if (!anexo) {
+      return reply.code(404).send({ ok: false, erro: "anexo nao encontrado" });
+    }
+
+    reply.header("Content-Type", anexo.mimeType);
+    if (anexo.nomeArquivo) {
+      reply.header("Content-Disposition", `inline; filename="${anexo.nomeArquivo.replace(/"/g, "")}"`);
+    }
+    return reply.send(streamArquivo(anexo.caminhoArmazenamento));
+  });
 }

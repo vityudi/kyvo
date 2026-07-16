@@ -1,6 +1,7 @@
+import { criarAnexo, type NovoAnexo } from "../db/anexo.js";
 import { listarCategorias } from "../db/categoria.js";
 import { listarMetasAtivas } from "../db/meta.js";
-import { carregarHistorico, salvarTurno } from "../db/mensagem.js";
+import { carregarHistorico, salvarMensagemUsuario, salvarRespostaAssistente } from "../db/mensagem.js";
 import { listarOrcamentos } from "../db/orcamento.js";
 import { obterPerfil } from "../db/perfilUsuario.js";
 import { listarRegras } from "../db/regraCategorizacao.js";
@@ -122,21 +123,39 @@ function extrairTexto(content: ContentPart[]): string {
     .trim();
 }
 
+/** Metadados de um anexo ja baixado/salvo em disco, faltando so vincular ao id da mensagem. */
+export type AnexoPendente = Omit<NovoAnexo, "mensagemId">;
+
+export interface TurnoUsuario {
+  texto: string;
+  /** Blocos de imagem/documento (base64) a dar pro LLM - ver ContentPart em llm/types.ts. */
+  conteudoParaLlm?: ContentPart[];
+  /** Anexos ja salvos em disco, persistidos no banco assim que a mensagem do usuario existir. */
+  anexosParaPersistir?: AnexoPendente[];
+}
+
 /**
  * Roda o loop de agente (mensagem -> tool_use -> tool_result -> ...) ate o
- * modelo parar de chamar tools, persiste o turno final em `mensagem` e
- * retorna o texto de resposta a ser enviado ao usuario.
+ * modelo parar de chamar tools, persiste o turno final em `mensagem` (e os
+ * anexos, se houver) e retorna o texto de resposta a ser enviado ao usuario.
  */
-export async function processarMensagem(usuarioId: string, textoUsuario: string): Promise<string> {
+export async function processarMensagem(conversaId: string, usuarioId: string, turno: TurnoUsuario): Promise<string> {
+  const { texto: textoUsuario, conteudoParaLlm = [], anexosParaPersistir = [] } = turno;
+
   const [systemPrompt, historico, llm] = await Promise.all([
     buildSystemPrompt(usuarioId),
-    carregarHistorico(usuarioId),
+    carregarHistorico(conversaId),
     getLlmClient(),
   ]);
 
+  const mensagemUsuarioId = await salvarMensagemUsuario(usuarioId, conversaId, textoUsuario);
+  for (const anexo of anexosParaPersistir) {
+    await criarAnexo({ ...anexo, mensagemId: mensagemUsuarioId });
+  }
+
   const messages: ChatMessage[] = [
-    ...historico.map((turno): ChatMessage => ({ role: turno.role, content: [{ type: "text", text: turno.conteudo }] })),
-    { role: "user", content: [{ type: "text", text: textoUsuario }] },
+    ...historico.map((t): ChatMessage => ({ role: t.role, content: [{ type: "text", text: t.conteudo }] })),
+    { role: "user", content: [{ type: "text", text: textoUsuario }, ...conteudoParaLlm] },
   ];
 
   let textoResposta = "";
@@ -178,7 +197,7 @@ export async function processarMensagem(usuarioId: string, textoUsuario: string)
       "Desculpa, me perdi tentando processar isso. Pode tentar reformular a mensagem?";
   }
 
-  await salvarTurno(usuarioId, textoUsuario, textoResposta);
+  await salvarRespostaAssistente(usuarioId, conversaId, textoResposta);
 
   return textoResposta;
 }

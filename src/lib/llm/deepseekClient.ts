@@ -19,16 +19,29 @@ export function createDeepseekClient(apiKey: string, model: string): LlmClient {
       if (systemPrompt) oaMessages.push({ role: "system", content: systemPrompt });
 
       for (const m of messages as ChatMessage[]) {
-        const textParts = m.content.filter((p): p is Extract<ContentPart, { type: "text" }> => p.type === "text");
         const toolUses = m.content.filter((p): p is Extract<ContentPart, { type: "tool_use" }> => p.type === "tool_use");
         const toolResults = m.content.filter(
           (p): p is Extract<ContentPart, { type: "tool_result" }> => p.type === "tool_result",
         );
 
+        // DeepSeek nao aceita imagem/documento binario - vira uma linha de
+        // texto-placeholder junto do resto do texto, pra nao perder o anexo
+        // silenciosamente nem quebrar a chamada.
+        const textos = m.content
+          .filter(
+            (p): p is Extract<ContentPart, { type: "text" | "image" | "document" }> =>
+              p.type === "text" || p.type === "image" || p.type === "document",
+          )
+          .map((p) => {
+            if (p.type === "text") return p.text;
+            if (p.type === "image") return "[usuário enviou uma imagem]";
+            return `[usuário enviou um documento${p.nome ? `: ${p.nome}` : ""}]`;
+          });
+
         if (m.role === "assistant") {
           oaMessages.push({
             role: "assistant",
-            content: textParts.map((p) => p.text).join("\n") || null,
+            content: textos.join("\n") || null,
             tool_calls: toolUses.length
               ? toolUses.map((tu) => ({
                   id: tu.id,
@@ -38,8 +51,8 @@ export function createDeepseekClient(apiKey: string, model: string): LlmClient {
               : undefined,
           });
         } else {
-          if (textParts.length) {
-            oaMessages.push({ role: "user", content: textParts.map((p) => p.text).join("\n") });
+          if (textos.length) {
+            oaMessages.push({ role: "user", content: textos.join("\n") });
           }
           for (const tr of toolResults) {
             oaMessages.push({ role: "tool", tool_call_id: tr.toolUseId, content: tr.content });

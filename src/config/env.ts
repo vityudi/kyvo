@@ -31,6 +31,16 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN e obrigatoria - veja .env.example"),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 
+  // Anexos de mensagem (imagem/audio/documento) - armazenados no filesystem
+  // local (sem infra de nuvem hoje, ver src/lib/storage.ts).
+  UPLOADS_DIR: z.string().default("./uploads"),
+  MAX_ANEXO_BYTES: z.coerce.number().int().positive().default(15 * 1024 * 1024),
+
+  // Transcricao de audio (voz do Telegram) via Groq/Whisper - opcional: sem
+  // a chave, o audio ainda e salvo como anexo mas nao chega como texto pro
+  // agente (ver src/lib/llm/transcricao.ts).
+  GROQ_API_KEY: z.string().optional(),
+
   // Bootstrap opcional (dev local): seeda o provedor Anthropic no primeiro
   // boot via `npm run seed:llm-config`. Nao e lido em nenhum caminho de
   // request normal - config de LLM em runtime vem sempre do banco.

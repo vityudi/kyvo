@@ -94,15 +94,11 @@ export function ProvedoresView() {
   }
 
   return (
-    <div className="mx-auto max-w-[760px] px-6 py-16">
-      <header className="mb-10">
-        <p className="mb-1 text-[13px] text-text-secondary">Kyvo</p>
-        <h1 className="mb-2 text-[28px] font-semibold tracking-tight text-text-primary">Provedor de IA</h1>
-        <p className="max-w-[52ch] text-[15px] leading-relaxed text-text-secondary">
-          Escolha qual modelo responde às mensagens do assistente. A troca vale para a próxima mensagem, sem
-          precisar reiniciar nada.
-        </p>
-      </header>
+    <div className="px-5 py-5">
+      <p className="mb-5 text-sm leading-relaxed text-text-secondary">
+        Escolha qual modelo responde às mensagens do assistente. A troca vale para a próxima mensagem, sem precisar
+        reiniciar nada.
+      </p>
 
       {erroCarregamento && <p className="text-sm text-text-secondary">Falha ao carregar: {erroCarregamento}</p>}
       {!provedores && !erroCarregamento && <p className="text-sm text-text-secondary">Carregando…</p>}
