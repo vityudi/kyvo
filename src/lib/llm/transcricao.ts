@@ -38,9 +38,30 @@ export async function transcreverAudio(buffer: Buffer, mimeType: string): Promis
   }
 }
 
+const EXTENSAO_POR_MIME: Record<string, string> = {
+  "audio/ogg": ".ogg",
+  "audio/opus": ".opus",
+  "audio/mpeg": ".mp3",
+  "audio/mp3": ".mp3",
+  "audio/mp4": ".m4a",
+  "audio/m4a": ".m4a",
+  "audio/x-m4a": ".m4a",
+  "audio/wav": ".wav",
+  "audio/x-wav": ".wav",
+  "audio/webm": ".webm",
+  "audio/flac": ".flac",
+};
+
+/**
+ * O Whisper da Groq valida o tipo do arquivo pela extensao do nome, nao pelo
+ * `type` do blob - por isso a extensao precisa bater com uma das aceitas
+ * ([flac mp3 mp4 mpeg mpga m4a ogg opus wav webm]). O Content-Type que o
+ * Telegram devolve no download do voice note costuma vir com parametros (ex.:
+ * "audio/ogg; codecs=opus"), entao normalizamos antes de comparar. Sem
+ * correspondencia, ".ogg" e o fallback seguro pois e o formato quase
+ * universal de voice note do Telegram.
+ */
 function extensaoParaMime(mimeType: string): string {
-  if (mimeType === "audio/ogg") return ".ogg";
-  if (mimeType === "audio/mpeg") return ".mp3";
-  if (mimeType === "audio/mp4") return ".m4a";
-  return "";
+  const tipoBase = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+  return EXTENSAO_POR_MIME[tipoBase] ?? ".ogg";
 }
