@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Paperclip, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
-import { criarConversa, enviarMensagem, listarConversas, type ConversaResumo } from "../api";
+import { criarConversa, listarConversas, type ConversaResumo } from "../api";
 
 interface Props {
-  onConversaCriada: (conversa: ConversaResumo) => void;
+  onConversaCriada: (conversa: ConversaResumo, mensagemInicial: { texto: string; arquivo: File | null }) => void;
 }
 
 interface Contato {
@@ -58,18 +58,23 @@ export function Home({ onConversaCriada }: Props) {
     setErroEnvio(null);
     try {
       const nova = await criarConversa(contato.usuarioId);
-      await enviarMensagem(nova.id, conteudo, arquivo ?? undefined);
-      onConversaCriada({
-        id: nova.id,
-        usuarioId: nova.usuarioId,
-        telegramChatId: contato.telegramChatId,
-        titulo: nova.titulo,
-        status: nova.status,
-        ultimaMensagem: conteudo || null,
-        ultimaRole: "user",
-        ultimaEm: new Date().toISOString(),
-        totalMensagens: arquivo ? 2 : 1,
-      });
+      // Navega pro chat assim que a conversa e criada, sem esperar o agente
+      // responder - a propria ConversaView dispara essa mensagem inicial e
+      // mostra a bolha otimista + espera da resposta, igual um envio normal.
+      onConversaCriada(
+        {
+          id: nova.id,
+          usuarioId: nova.usuarioId,
+          telegramChatId: contato.telegramChatId,
+          titulo: nova.titulo,
+          status: nova.status,
+          ultimaMensagem: conteudo || null,
+          ultimaRole: "user",
+          ultimaEm: new Date().toISOString(),
+          totalMensagens: arquivo ? 2 : 1,
+        },
+        { texto: conteudo, arquivo },
+      );
     } catch (err) {
       setErroEnvio(err instanceof Error ? err.message : String(err));
     } finally {

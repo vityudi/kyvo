@@ -13,17 +13,31 @@ import { carregarMensagens, enviarMensagem, urlAnexo, type Anexo, type MensagemA
 import { formatarHorario } from "../lib/tempo";
 import { Modal } from "./Modal";
 
+interface MensagemInicial {
+  texto: string;
+  arquivo: File | null;
+}
+
 interface Props {
   conversaId: string;
   telegramChatId: number;
   onMensagemEnviada: () => void;
+  /** Mensagem ja digitada na tela de "nova conversa" (Home.tsx) - enviada assim que a view monta, pra navegar direto pro chat em vez de esperar a resposta do agente antes de trocar de tela. */
+  mensagemInicial?: MensagemInicial | null;
+  onMensagemInicialConsumida?: () => void;
 }
 
 let contadorOtimista = 0;
 
 const ACEITA_ANEXO = "image/*,audio/*,application/pdf";
 
-export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: Props) {
+export function ConversaView({
+  conversaId,
+  telegramChatId,
+  onMensagemEnviada,
+  mensagemInicial,
+  onMensagemInicialConsumida,
+}: Props) {
   const [mensagens, setMensagens] = useState<MensagemAdmin[] | null>(null);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [carregandoAntigas, setCarregandoAntigas] = useState(false);
@@ -111,18 +125,14 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
     e.target.value = "";
   }
 
-  async function handleEnviar() {
-    const conteudo = texto.trim();
-    if ((!conteudo && !arquivo) || enviando) return;
+  async function enviarConteudo(conteudo: string, arquivoParaEnviar: File | null) {
+    if ((!conteudo && !arquivoParaEnviar) || enviandoRef.current) return;
 
     const idOtimista = `otimista-${contadorOtimista++}`;
     setMensagens((atual) => [
       ...(atual ?? []),
       { id: idOtimista, role: "user", conteudo, criadoEm: new Date().toISOString(), anexos: [] },
     ]);
-    setTexto("");
-    const arquivoEnviado = arquivo;
-    setArquivo(null);
     setEnviando(true);
     enviandoRef.current = true;
     setErroEnvio(null);
@@ -131,7 +141,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
     });
 
     try {
-      await enviarMensagem(conversaId, conteudo, arquivoEnviado ?? undefined);
+      await enviarMensagem(conversaId, conteudo, arquivoParaEnviar ?? undefined);
       const recentes = await carregarMensagens(conversaId);
       setMensagens((atual) => mesclarMensagens(atual?.filter((m) => m.id !== idOtimista) ?? null, recentes));
       onMensagemEnviada();
@@ -142,12 +152,35 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
       setErroEnvio(err instanceof Error ? err.message : String(err));
       setMensagens((atual) => atual?.filter((m) => m.id !== idOtimista) ?? null);
       setTexto(conteudo);
-      setArquivo(arquivoEnviado);
+      setArquivo(arquivoParaEnviar);
     } finally {
       setEnviando(false);
       enviandoRef.current = false;
     }
   }
+
+  async function handleEnviar() {
+    const conteudo = texto.trim();
+    if ((!conteudo && !arquivo) || enviando) return;
+
+    const arquivoParaEnviar = arquivo;
+    setTexto("");
+    setArquivo(null);
+    await enviarConteudo(conteudo, arquivoParaEnviar);
+  }
+
+  // Chat criado a partir da tela "nova conversa" (Home.tsx): a mensagem ja foi
+  // digitada la, essa view so precisa dispara-la assim que montar - roda uma
+  // unica vez por conversaId (guardado pelo ref, ja que StrictMode chama
+  // effects duas vezes em dev).
+  const mensagemInicialEnviadaRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mensagemInicial || mensagemInicialEnviadaRef.current === conversaId) return;
+    mensagemInicialEnviadaRef.current = conversaId;
+    enviarConteudo(mensagemInicial.texto.trim(), mensagemInicial.arquivo);
+    onMensagemInicialConsumida?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversaId, mensagemInicial]);
 
   return (
     <div className="flex h-full flex-col">

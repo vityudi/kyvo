@@ -99,6 +99,15 @@ export async function iniciarNovaConversa(usuarioId: string): Promise<Conversa> 
 }
 
 /**
+ * Titulo generico usado quando o primeiro turno nao tem contexto suficiente
+ * pra gerar um titulo de verdade (ex.: usuario so mandou "oi") - fica na
+ * sidebar no lugar de "Usuario #chatId" ate a conversa acumular contexto
+ * suficiente pra tituloConversa.ts substituir por um titulo real (ver
+ * substituirTituloPlaceholder).
+ */
+export const TITULO_PLACEHOLDER = "Nova conversa";
+
+/**
  * Define o titulo de uma conversa, sem sobrescrever um ja existente - usado
  * pela geracao automatica de titulo (ver tituloConversa.ts) apos o primeiro
  * turno, tanto pra nao pisar num titulo definido manualmente quanto pra
@@ -106,6 +115,20 @@ export async function iniciarNovaConversa(usuarioId: string): Promise<Conversa> 
  */
 export async function definirTituloSeAusente(conversaId: string, titulo: string): Promise<void> {
   await pool.query("update conversa set titulo = $2 where id = $1 and titulo is null", [conversaId, titulo]);
+}
+
+export async function obterTitulo(conversaId: string): Promise<string | null> {
+  const { rows } = await pool.query<{ titulo: string | null }>("select titulo from conversa where id = $1", [conversaId]);
+  return rows[0]?.titulo ?? null;
+}
+
+/**
+ * Troca o titulo pelo definitivo, mas so se ainda estiver no placeholder -
+ * chamado nos turnos seguintes ao primeiro enquanto a conversa nao tiver
+ * contexto suficiente (ver agent.ts). Nunca pisa num titulo real ja definido.
+ */
+export async function substituirTituloPlaceholder(conversaId: string, titulo: string): Promise<void> {
+  await pool.query("update conversa set titulo = $2 where id = $1 and titulo = $3", [conversaId, titulo, TITULO_PLACEHOLDER]);
 }
 
 /**

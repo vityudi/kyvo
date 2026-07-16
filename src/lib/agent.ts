@@ -1,15 +1,20 @@
 import { criarAnexo, type NovoAnexo } from "../db/anexo.js";
 import { listarCategorias } from "../db/categoria.js";
-import { definirTituloSeAusente } from "../db/conversa.js";
+import {
+  TITULO_PLACEHOLDER,
+  definirTituloSeAusente,
+  obterTitulo,
+  substituirTituloPlaceholder,
+} from "../db/conversa.js";
 import { listarMetasAtivas } from "../db/meta.js";
-import { carregarHistorico, salvarMensagemUsuario, salvarRespostaAssistente } from "../db/mensagem.js";
+import { carregarHistorico, salvarMensagemUsuario, salvarRespostaAssistente, type Turno } from "../db/mensagem.js";
 import { listarOrcamentos } from "../db/orcamento.js";
 import { obterPerfil } from "../db/perfilUsuario.js";
 import { listarRegras } from "../db/regraCategorizacao.js";
 import { getLlmClient } from "./llm/index.js";
 import type { ChatMessage, ContentPart } from "./llm/types.js";
 import { logger } from "./logger.js";
-import { gerarTituloConversa } from "./tituloConversa.js";
+import { formatarTranscript, gerarTituloConversa } from "./tituloConversa.js";
 import { executeTool, toolDefinitions } from "./tools.js";
 
 const MAX_TOOL_ITERATIONS = 6;
@@ -227,14 +232,42 @@ export async function processarMensagem(conversaId: string, usuarioId: string, t
 
   await salvarRespostaAssistente(usuarioId, conversaId, textoResposta);
 
-  // So no primeiro turno da conversa (sem historico previo) - gera em
-  // background pra nao atrasar a resposta ao usuario; definirTituloSeAusente
-  // e um no-op se a conversa ja tiver titulo.
-  if (historico.length === 0) {
-    gerarTituloConversa(textoUsuario, textoResposta)
-      .then((titulo) => (titulo ? definirTituloSeAusente(conversaId, titulo) : undefined))
-      .catch((err) => logger.error(err, "falha ao gerar titulo da conversa"));
-  }
+  atualizarTituloEmBackground(conversaId, historico, textoUsuario, textoResposta);
 
   return textoResposta;
+}
+
+/**
+ * Gera/atualiza o titulo da conversa em background, sem atrasar a resposta
+ * ao usuario. No primeiro turno sempre define algo (titulo de verdade ou o
+ * placeholder TITULO_PLACEHOLDER, se a mensagem ainda nao tiver contexto -
+ * ex.: um simples "oi"). Nos turnos seguintes, so tenta de novo enquanto o
+ * titulo continuar no placeholder, usando o transcript acumulado - assim que
+ * a conversa ganhar contexto suficiente, o placeholder e substituido.
+ */
+function atualizarTituloEmBackground(
+  conversaId: string,
+  historico: Turno[],
+  textoUsuario: string,
+  textoResposta: string,
+): void {
+  const turnoAtual: Turno[] = [
+    { role: "user", conteudo: textoUsuario },
+    { role: "assistant", conteudo: textoResposta },
+  ];
+
+  if (historico.length === 0) {
+    gerarTituloConversa(formatarTranscript(turnoAtual))
+      .then((titulo) => definirTituloSeAusente(conversaId, titulo || TITULO_PLACEHOLDER))
+      .catch((err) => logger.error(err, "falha ao gerar titulo da conversa"));
+    return;
+  }
+
+  obterTitulo(conversaId)
+    .then(async (tituloAtual) => {
+      if (tituloAtual !== TITULO_PLACEHOLDER) return;
+      const titulo = await gerarTituloConversa(formatarTranscript([...historico, ...turnoAtual]));
+      if (titulo) await substituirTituloPlaceholder(conversaId, titulo);
+    })
+    .catch((err) => logger.error(err, "falha ao atualizar titulo da conversa"));
 }

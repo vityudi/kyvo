@@ -7,8 +7,15 @@ import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { useTheme } from "./lib/theme";
 
+interface MensagemInicialPendente {
+  conversaId: string;
+  texto: string;
+  arquivo: File | null;
+}
+
 export function App() {
   const [conversaSelecionada, setConversaSelecionada] = useState<ConversaResumo | null>(null);
+  const [mensagemInicialPendente, setMensagemInicialPendente] = useState<MensagemInicialPendente | null>(null);
   const [atualizarSinal, setAtualizarSinal] = useState(0);
   const [configuracoesAbertas, setConfiguracoesAbertas] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(true);
@@ -19,9 +26,10 @@ export function App() {
     setConversaSelecionada(null);
   }
 
-  function handleConversaCriada(conversa: ConversaResumo) {
+  function handleConversaCriada(conversa: ConversaResumo, mensagemInicial: { texto: string; arquivo: File | null }) {
     setConfiguracoesAbertas(false);
     setConversaSelecionada(conversa);
+    setMensagemInicialPendente({ conversaId: conversa.id, ...mensagemInicial });
     setAtualizarSinal((n) => n + 1);
   }
 
@@ -68,6 +76,12 @@ export function App() {
               conversaId={conversaSelecionada.id}
               telegramChatId={conversaSelecionada.telegramChatId}
               onMensagemEnviada={() => setAtualizarSinal((n) => n + 1)}
+              mensagemInicial={
+                mensagemInicialPendente?.conversaId === conversaSelecionada.id
+                  ? { texto: mensagemInicialPendente.texto, arquivo: mensagemInicialPendente.arquivo }
+                  : null
+              }
+              onMensagemInicialConsumida={() => setMensagemInicialPendente(null)}
             />
           ) : (
             <Home onConversaCriada={handleConversaCriada} />
