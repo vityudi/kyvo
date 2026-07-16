@@ -1,11 +1,11 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { listarCategorias } from "../db/categoria.js";
 import { listarMetasAtivas } from "../db/meta.js";
 import { carregarHistorico, salvarTurno } from "../db/mensagem.js";
 import { listarOrcamentos } from "../db/orcamento.js";
 import { obterPerfil } from "../db/perfilUsuario.js";
 import { listarRegras } from "../db/regraCategorizacao.js";
-import { anthropic, DEFAULT_MODEL } from "./anthropic.js";
+import { getLlmClient } from "./llm/index.js";
+import type { ChatMessage, ContentPart } from "./llm/types.js";
 import { logger } from "./logger.js";
 import { executeTool, toolDefinitions } from "./tools.js";
 
@@ -114,9 +114,9 @@ esquecer_contexto_pessoal (busque com buscar_insights_usuario primeiro se precis
 perguntar o motivo.`;
 }
 
-function extrairTexto(content: Anthropic.ContentBlock[]): string {
+function extrairTexto(content: ContentPart[]): string {
   return content
-    .filter((bloco): bloco is Anthropic.TextBlock => bloco.type === "text")
+    .filter((bloco): bloco is Extract<ContentPart, { type: "text" }> => bloco.type === "text")
     .map((bloco) => bloco.text)
     .join("\n")
     .trim();
@@ -128,44 +128,44 @@ function extrairTexto(content: Anthropic.ContentBlock[]): string {
  * retorna o texto de resposta a ser enviado ao usuario.
  */
 export async function processarMensagem(usuarioId: string, textoUsuario: string): Promise<string> {
-  const [systemPrompt, historico] = await Promise.all([
+  const [systemPrompt, historico, llm] = await Promise.all([
     buildSystemPrompt(usuarioId),
     carregarHistorico(usuarioId),
+    getLlmClient(),
   ]);
 
-  const messages: Anthropic.MessageParam[] = [
-    ...historico.map((turno): Anthropic.MessageParam => ({ role: turno.role, content: turno.conteudo })),
-    { role: "user", content: textoUsuario },
+  const messages: ChatMessage[] = [
+    ...historico.map((turno): ChatMessage => ({ role: turno.role, content: [{ type: "text", text: turno.conteudo }] })),
+    { role: "user", content: [{ type: "text", text: textoUsuario }] },
   ];
 
   let textoResposta = "";
 
   for (let iteracao = 0; iteracao < MAX_TOOL_ITERATIONS; iteracao++) {
-    const resposta = await anthropic.messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: systemPrompt,
+    const resposta = await llm.createCompletion({
+      systemPrompt,
       tools: toolDefinitions,
+      maxTokens: MAX_TOKENS,
       messages,
     });
 
     messages.push({ role: "assistant", content: resposta.content });
 
-    if (resposta.stop_reason !== "tool_use") {
+    if (resposta.stopReason !== "tool_use") {
       textoResposta = extrairTexto(resposta.content);
       break;
     }
 
-    const toolUses = resposta.content.filter((bloco): bloco is Anthropic.ToolUseBlock => bloco.type === "tool_use");
+    const toolUses = resposta.content.filter((bloco): bloco is Extract<ContentPart, { type: "tool_use" }> => bloco.type === "tool_use");
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    const toolResults: ContentPart[] = [];
     for (const toolUse of toolUses) {
       const resultado = await executeTool(toolUse.name, toolUse.input, usuarioId);
       toolResults.push({
         type: "tool_result",
-        tool_use_id: toolUse.id,
+        toolUseId: toolUse.id,
         content: resultado.conteudo,
-        is_error: resultado.ehErro,
+        isError: resultado.ehErro,
       });
     }
 

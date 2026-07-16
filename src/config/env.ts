@@ -17,11 +17,22 @@ const envSchema = z.object({
   POSTGRES_PASSWORD: z.string().min(1),
   POSTGRES_DB: z.string().min(1),
 
-  ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY e obrigatoria - veja .env.example"),
-  ANTHROPIC_MODEL: z.string().default("claude-opus-4-8"),
+  // Chave mestra de cifragem (AES-256-GCM) das API keys de LLM guardadas no
+  // banco - gere com: openssl rand -hex 32
+  CONFIG_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, "CONFIG_ENCRYPTION_KEY deve ter 64 caracteres hex (32 bytes)"),
+
+  // Senha do painel /admin (usuario fixo "admin", HTTP Basic Auth).
+  ADMIN_PASSWORD: z.string().min(8, "ADMIN_PASSWORD e obrigatoria - veja .env.example"),
 
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN e obrigatoria - veja .env.example"),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+
+  // Bootstrap opcional (dev local): seeda o provedor Anthropic no primeiro
+  // boot via `npm run seed:llm-config`. Nao e lido em nenhum caminho de
+  // request normal - config de LLM em runtime vem sempre do banco.
+  ANTHROPIC_API_KEY_BOOTSTRAP: z.string().optional(),
 
   // Open Finance (Fase 2+) - opcional no esqueleto inicial.
   PLUGGY_CLIENT_ID: z.string().optional(),

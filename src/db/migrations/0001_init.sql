@@ -1,4 +1,5 @@
--- Schema inicial do Kyvo.
+-- Schema inicial do Kyvo (consolidado - projeto ainda pre-producao, sem
+-- historico de deploy a preservar).
 -- Consolida as decisoes registradas em docs/FOUNDATION.md,
 -- docs/RAG_MEMORY_ARCHITECTURE.md e docs/TOOLS_FASE_0_1.md.
 
@@ -222,3 +223,69 @@ create table base_conhecimento (
 create index idx_base_conhecimento_tags on base_conhecimento using gin (tags);
 create index idx_base_conhecimento_ativo on base_conhecimento (ativo);
 create index idx_base_conhecimento_busca on base_conhecimento using gin (busca);
+
+-- ---------------------------------------------------------------------------
+-- Historico curto de conversa (FOUNDATION.md, secao 4.3): guarda so o texto
+-- final de cada turno (mensagem do usuario e resposta final do agente), nao
+-- os blocos internos de tool_use/tool_result do loop do agente.
+-- ---------------------------------------------------------------------------
+
+create table mensagem (
+    id          uuid primary key default gen_random_uuid(),
+    usuario_id  uuid not null references usuario(id) on delete cascade,
+    role        text not null check (role in ('user', 'assistant')),
+    conteudo    text not null,
+    criado_em   timestamptz not null default now()
+);
+
+create index idx_mensagem_usuario_criado on mensagem (usuario_id, criado_em);
+
+-- ---------------------------------------------------------------------------
+-- Dedupe de alertas proativos (FOUNDATION.md, decisao #2) - garante que o
+-- mesmo alerta (mesmo usuario/tipo/chave/periodo) nao seja reenviado a cada
+-- vez que o worker roda enquanto a condicao continuar verdadeira.
+-- ---------------------------------------------------------------------------
+
+create table alerta_enviado (
+    id                  uuid primary key default gen_random_uuid(),
+    usuario_id          uuid not null references usuario(id) on delete cascade,
+    tipo                text not null check (tipo in ('orcamento_estourado', 'meta_prazo_proximo')),
+
+    -- categoria (orcamento_estourado) ou meta_id (meta_prazo_proximo)
+    chave               text not null,
+
+    -- mes corrente (orcamento_estourado, reseta todo mes) ou o proprio prazo
+    -- da meta (meta_prazo_proximo, so realerta se o prazo mudar)
+    periodo_referencia  date not null,
+
+    criado_em           timestamptz not null default now(),
+
+    unique (usuario_id, tipo, chave, periodo_referencia)
+);
+
+create index idx_alerta_enviado_usuario on alerta_enviado (usuario_id);
+
+-- ---------------------------------------------------------------------------
+-- Configuracao de provedores de LLM (Anthropic/DeepSeek), gerenciada via
+-- /admin. A api_key_cifrada fica cifrada (AES-256-GCM, ver src/lib/crypto.ts)
+-- - a chave mestra de cifragem vem de CONFIG_ENCRYPTION_KEY (env), nunca do
+-- banco.
+-- ---------------------------------------------------------------------------
+
+create table llm_provedor (
+    id                  uuid primary key default gen_random_uuid(),
+    provider            text not null unique check (provider in ('anthropic', 'deepseek')),
+    modelo              text not null,
+    api_key_cifrada     text,
+    ativo               boolean not null default false,
+    criado_em           timestamptz not null default now(),
+    atualizado_em       timestamptz not null default now()
+);
+
+-- Garante no maximo 1 provedor ativo por vez (indice parcial unico sobre
+-- valores true - nativo do Postgres, sem precisar de lock em nivel de app).
+create unique index idx_llm_provedor_ativo on llm_provedor (ativo) where ativo;
+
+insert into llm_provedor (provider, modelo, ativo) values
+    ('anthropic', 'claude-opus-4-8', false),
+    ('deepseek', 'deepseek-chat', false);

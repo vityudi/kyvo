@@ -3,6 +3,7 @@ import { env } from "./config/env.js";
 import { runMigrations } from "./db/migrate.js";
 import { pool } from "./db/pool.js";
 import { logger } from "./lib/logger.js";
+import { adminRoutes } from "./routes/admin.js";
 import { telegramRoutes } from "./routes/telegram.js";
 
 async function main(): Promise<void> {
@@ -16,6 +17,7 @@ async function main(): Promise<void> {
   });
 
   await app.register(telegramRoutes);
+  await app.register(adminRoutes);
 
   const address = await app.listen({ host: "0.0.0.0", port: env.PORT });
   logger.info(`servidor escutando em ${address}`);

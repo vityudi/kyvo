@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { env } from "../config/env.js";
 import { obterOuCriarUsuario } from "../db/usuario.js";
 import { processarMensagem } from "../lib/agent.js";
+import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
 import { logger } from "../lib/logger.js";
 import { sendTelegramMessage, type TelegramUpdate } from "../lib/telegram.js";
 
@@ -33,10 +34,11 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
       await sendTelegramMessage(message.chat.id, resposta);
     } catch (err) {
       logger.error({ err, usuarioId: usuario.id }, "falha ao processar mensagem com o agente");
-      await sendTelegramMessage(
-        message.chat.id,
-        "Deu um erro aqui do meu lado processando sua mensagem. Pode tentar de novo?",
-      );
+      const resposta =
+        err instanceof LlmNaoConfiguradoError
+          ? "Ainda não estou configurado — peça para quem administra o bot configurar um provedor de IA em /admin."
+          : "Deu um erro aqui do meu lado processando sua mensagem. Pode tentar de novo?";
+      await sendTelegramMessage(message.chat.id, resposta);
     }
 
     return reply.code(200).send({ ok: true });

@@ -1,5 +1,5 @@
 import type { ResumoPeriodo } from "../db/transacao.js";
-import { anthropic, DEFAULT_MODEL } from "./anthropic.js";
+import { getLlmClient } from "./llm/index.js";
 
 const MAX_TOKENS_INSIGHT = 300;
 
@@ -10,10 +10,11 @@ const MAX_TOKENS_INSIGHT = 300;
  * dado de base.
  */
 async function gerarTexto(prompt: string): Promise<string> {
-  const resposta = await anthropic.messages.create({
-    model: DEFAULT_MODEL,
-    max_tokens: MAX_TOKENS_INSIGHT,
-    messages: [{ role: "user", content: prompt }],
+  const llm = await getLlmClient();
+  const resposta = await llm.createCompletion({
+    maxTokens: MAX_TOKENS_INSIGHT,
+    tools: [],
+    messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
   });
 
   return resposta.content

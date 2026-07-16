@@ -1,4 +1,3 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { buscarPrincipios } from "../db/baseConhecimento.js";
 import { criarOuAtualizarOrcamento } from "../db/orcamento.js";
 import { atualizarMeta, criarMeta } from "../db/meta.js";
@@ -15,6 +14,7 @@ import {
   resumoPeriodo,
 } from "../db/transacao.js";
 import { logger } from "./logger.js";
+import type { ToolDefinition } from "./llm/types.js";
 
 /**
  * As 11 tools de Fase 0/1 especificadas em docs/TOOLS_FASE_0_1.md, com o
@@ -22,7 +22,7 @@ import { logger } from "./logger.js";
  * aparece como parametro (principio 1 do documento) - o backend injeta a
  * partir da sessao de chat antes de chamar `executeTool`.
  */
-const baseToolDefinitions: Anthropic.Tool[] = [
+const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "registrar_gasto",
     description:
@@ -221,7 +221,7 @@ const baseToolDefinitions: Anthropic.Tool[] = [
  * Tools da camada de memoria RAG (docs/RAG_MEMORY_ARCHITECTURE.md, secao 4) -
  * so entram em `toolDefinitions` quando `ragEnabled` for true.
  */
-const ragToolDefinitions: Anthropic.Tool[] = [
+const ragToolDefinitions: ToolDefinition[] = [
   {
     name: "atualizar_perfil",
     description:
@@ -330,7 +330,7 @@ const ragToolDefinitions: Anthropic.Tool[] = [
   },
 ];
 
-export const toolDefinitions: Anthropic.Tool[] = [...baseToolDefinitions, ...ragToolDefinitions];
+export const toolDefinitions: ToolDefinition[] = [...baseToolDefinitions, ...ragToolDefinitions];
 
 export interface ResultadoTool {
   conteudo: string;
