@@ -142,8 +142,8 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-6 py-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-text-secondary">
+      <header className="flex items-center gap-3 px-6 py-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-text-secondary">
           {String(telegramChatId).slice(-2)}
         </div>
         <div>
@@ -152,135 +152,146 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4">
-        {erroCarga && <p className="text-sm text-danger">Falha ao carregar mensagens: {erroCarga}</p>}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="mx-auto flex w-full max-w-3xl flex-col">
+          {erroCarga && <p className="text-sm text-danger">Falha ao carregar mensagens: {erroCarga}</p>}
 
-        {!mensagens && !erroCarga && (
-          <div className="flex flex-col gap-3">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className={`h-12 w-2/5 animate-pulse rounded-2xl bg-surface-sunken ${i % 2 ? "ml-auto" : ""}`} />
-            ))}
-          </div>
-        )}
-
-        {mensagens && mensagens.length === 0 && !erroCarga && (
-          <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
-            <ChatsCircle size={28} className="text-text-secondary" />
-            <p className="text-sm text-text-secondary">Nenhuma mensagem nessa conversa ainda.</p>
-          </div>
-        )}
-
-        {mensagens && mensagens.length > 0 && (
-          <>
-            {temMaisAntigas && (
-              <div className="mb-4 flex justify-center">
-                <button
-                  onClick={carregarAntigas}
-                  disabled={carregandoAntigas}
-                  className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-surface-sunken disabled:opacity-50"
-                >
-                  {carregandoAntigas ? "Carregando…" : "Carregar mensagens anteriores"}
-                </button>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3">
-              {mensagens.map((m) => (
-                <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                      m.role === "user"
-                        ? "bg-accent text-accent-contrast"
-                        : "border border-border bg-surface text-text-primary"
-                    }`}
-                  >
-                    {m.anexos.length > 0 && (
-                      <div className="mb-2 flex flex-col gap-2">
-                        {m.anexos.map((anexo) => (
-                          <AnexoPreview key={anexo.id} anexo={anexo} onAmpliarImagem={setImagemAmpliada} />
-                        ))}
-                      </div>
-                    )}
-                    {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
-                    <p
-                      className={`mt-1 text-[10px] ${
-                        m.role === "user" ? "text-accent-contrast/70" : "text-text-secondary"
-                      }`}
-                    >
-                      {formatarHorario(m.criadoEm)}
-                    </p>
-                  </div>
-                </div>
+          {!mensagens && !erroCarga && (
+            <div className="flex flex-col gap-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className={`h-12 w-2/5 animate-pulse rounded-2xl bg-surface-sunken ${i % 2 ? "ml-auto" : ""}`} />
               ))}
             </div>
-          </>
-        )}
+          )}
+
+          {mensagens && mensagens.length === 0 && !erroCarga && (
+            <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
+              <ChatsCircle size={28} className="text-text-secondary" />
+              <p className="text-sm text-text-secondary">Nenhuma mensagem nessa conversa ainda.</p>
+            </div>
+          )}
+
+          {mensagens && mensagens.length > 0 && (
+            <>
+              {temMaisAntigas && (
+                <div className="mb-4 flex justify-center">
+                  <button
+                    onClick={carregarAntigas}
+                    disabled={carregandoAntigas}
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-surface-sunken disabled:opacity-50"
+                  >
+                    {carregandoAntigas ? "Carregando…" : "Carregar mensagens anteriores"}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-5">
+                {mensagens.map((m) =>
+                  m.role === "user" ? (
+                    <div key={m.id} className="flex justify-end">
+                      <div className="max-w-[75%] rounded-2xl bg-accent px-4 py-2.5 text-sm leading-relaxed text-accent-contrast">
+                        {m.anexos.length > 0 && (
+                          <div className="mb-2 flex flex-col gap-2">
+                            {m.anexos.map((anexo) => (
+                              <AnexoPreview key={anexo.id} anexo={anexo} onAmpliarImagem={setImagemAmpliada} />
+                            ))}
+                          </div>
+                        )}
+                        {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
+                        <p className="mt-1 text-[10px] text-accent-contrast/70">{formatarHorario(m.criadoEm)}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={m.id} className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-accent-contrast">
+                        K
+                      </div>
+                      <div className="min-w-0 flex-1 text-sm leading-relaxed text-text-primary">
+                        {m.anexos.length > 0 && (
+                          <div className="mb-2 flex flex-col gap-2">
+                            {m.anexos.map((anexo) => (
+                              <AnexoPreview key={anexo.id} anexo={anexo} onAmpliarImagem={setImagemAmpliada} />
+                            ))}
+                          </div>
+                        )}
+                        {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
+                        <p className="mt-1 text-[10px] text-text-secondary">{formatarHorario(m.criadoEm)}</p>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {erroEnvio && (
-        <div className="flex items-center gap-2 border-t border-border bg-danger/10 px-6 py-2 text-xs text-danger">
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-2 px-4 text-xs text-danger">
           <WarningCircle size={14} weight="fill" />
           {erroEnvio}
         </div>
       )}
 
-      <div className="border-t border-border p-4">
-        {arquivo && (
-          <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
-            <Paperclip size={14} />
-            <span className="flex-1 truncate">{arquivo.name}</span>
+      <div className="px-4 pb-4 pt-1">
+        <div className="mx-auto w-full max-w-3xl">
+          {arquivo && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+              <Paperclip size={14} />
+              <span className="flex-1 truncate">{arquivo.name}</span>
+              <button
+                onClick={() => setArquivo(null)}
+                aria-label="Remover anexo"
+                className="flex h-5 w-5 items-center justify-center rounded-full transition hover:bg-border"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-end gap-2 rounded-3xl border border-border bg-surface-sunken p-2 shadow-sm">
+            <input
+              ref={inputArquivoRef}
+              type="file"
+              accept={ACEITA_ANEXO}
+              onChange={handleSelecionarArquivo}
+              className="hidden"
+            />
             <button
-              onClick={() => setArquivo(null)}
-              aria-label="Remover anexo"
-              className="flex h-5 w-5 items-center justify-center rounded-full transition hover:bg-border"
+              onClick={() => inputArquivoRef.current?.click()}
+              disabled={enviando}
+              aria-label="Anexar arquivo"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-surface disabled:opacity-40"
             >
-              <X size={12} />
+              <Paperclip size={17} />
+            </button>
+            <textarea
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleEnviar();
+                }
+              }}
+              placeholder="Enviar mensagem como este usuário…"
+              rows={1}
+              disabled={enviando}
+              className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
+            />
+            <button
+              onClick={handleEnviar}
+              disabled={enviando || (!texto.trim() && !arquivo)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-contrast transition active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Enviar mensagem"
+            >
+              <ArrowUp size={16} weight="bold" />
             </button>
           </div>
-        )}
-
-        <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface-sunken p-2">
-          <input
-            ref={inputArquivoRef}
-            type="file"
-            accept={ACEITA_ANEXO}
-            onChange={handleSelecionarArquivo}
-            className="hidden"
-          />
-          <button
-            onClick={() => inputArquivoRef.current?.click()}
-            disabled={enviando}
-            aria-label="Anexar arquivo"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-surface disabled:opacity-40"
-          >
-            <Paperclip size={17} />
-          </button>
-          <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleEnviar();
-              }
-            }}
-            placeholder="Enviar mensagem como este usuário…"
-            rows={1}
-            disabled={enviando}
-            className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
-          />
-          <button
-            onClick={handleEnviar}
-            disabled={enviando || (!texto.trim() && !arquivo)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-contrast transition active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Enviar mensagem"
-          >
-            <ArrowUp size={16} weight="bold" />
-          </button>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-text-secondary">
+            <ChatsCircle size={13} />A resposta do assistente é enviada de volta pro Telegram deste usuário também.
+          </p>
         </div>
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <ChatsCircle size={13} />A resposta do assistente é enviada de volta pro Telegram deste usuário também.
-        </p>
       </div>
 
       {imagemAmpliada && (
