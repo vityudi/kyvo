@@ -1,52 +1,82 @@
 @import "tailwindcss";
 
-@font-face {
-  font-family: "Geist";
-  src: local("Geist"), local("Inter");
-}
-
 :root {
-  --bg: #fafaf9;
-  --surface: #ffffff;
-  --surface-sunken: #f4f4f3;
-  --border: #e4e4e1;
-  --text-primary: #17171a;
-  --text-secondary: #6b6b68;
+  --wallpaper: radial-gradient(circle at 15% 10%, rgba(15, 122, 92, 0.14), transparent 45%),
+    radial-gradient(circle at 85% 15%, rgba(120, 160, 255, 0.09), transparent 50%),
+    radial-gradient(circle at 50% 95%, rgba(15, 122, 92, 0.07), transparent 55%), #f1f0eb;
+  --bg: #f1f0eb;
+  --glass: rgba(255, 255, 255, 0.5);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --surface: rgba(255, 255, 255, 0.5);
+  --surface-sunken: rgba(255, 255, 255, 0.72);
+  --border: rgba(20, 20, 15, 0.08);
+  --border-subtle: rgba(20, 20, 15, 0.08);
+  --text-primary: #1b1b18;
+  --text-secondary: rgba(27, 27, 24, 0.56);
+  --text-tertiary: rgba(27, 27, 24, 0.36);
   --accent: #0f7a5c;
+  --accent-deep: #0b5c45;
+  --accent-soft: rgba(15, 122, 92, 0.14);
   --accent-contrast: #ffffff;
   --danger: #b3341c;
   --success: #0f7a5c;
+  --input-bg: rgba(255, 255, 255, 0.55);
+  --scroll-thumb: rgba(20, 20, 15, 0.14);
+  --shadow-panel: 0 24px 70px -28px rgba(30, 28, 20, 0.28);
+  --shadow-input: 0 10px 26px -14px rgba(30, 28, 20, 0.18);
   --radius: 12px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0c0c0d;
-    --surface: #17171a;
-    --surface-sunken: #1e1e21;
-    --border: #2a2a2d;
-    --text-primary: #f3f3f1;
-    --text-secondary: #9a9a96;
-    --accent: #34c28c;
-    --accent-contrast: #06110d;
-    --danger: #e56a4c;
-    --success: #34c28c;
-  }
+:root.dark {
+  --wallpaper: radial-gradient(circle at 15% 12%, rgba(52, 194, 140, 0.16), transparent 45%),
+    radial-gradient(circle at 85% 18%, rgba(110, 150, 255, 0.1), transparent 50%),
+    radial-gradient(circle at 50% 95%, rgba(52, 194, 140, 0.07), transparent 55%), #0a0b0c;
+  --bg: #0a0b0c;
+  --glass: rgba(255, 255, 255, 0.055);
+  --glass-strong: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-sunken: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f1f1ee;
+  --text-secondary: rgba(241, 241, 238, 0.56);
+  --text-tertiary: rgba(241, 241, 238, 0.36);
+  --accent: #34c28c;
+  --accent-deep: #1c8f66;
+  --accent-soft: rgba(52, 194, 140, 0.2);
+  --accent-contrast: #06110d;
+  --danger: #e56a4c;
+  --success: #34c28c;
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --scroll-thumb: rgba(255, 255, 255, 0.14);
+  --shadow-panel: 0 24px 70px -24px rgba(0, 0, 0, 0.65);
+  --shadow-input: 0 10px 26px -12px rgba(0, 0, 0, 0.5);
 }
 
 @theme {
   --color-bg: var(--bg);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
   --color-surface: var(--surface);
   --color-surface-sunken: var(--surface-sunken);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
   --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-soft: var(--accent-soft);
   --color-accent-contrast: var(--accent-contrast);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  --color-input-bg: var(--input-bg);
   --radius-card: var(--radius);
-  --font-sans: "Geist", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter", -apple-system, "SF Pro Display", system-ui, sans-serif;
+  --font-serif: "Newsreader", serif;
 }
 
 * {
@@ -60,12 +90,37 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background: var(--wallpaper);
   color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.4s ease;
 }
 
 #root {
   min-height: 100dvh;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.glass-panel {
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  box-shadow: var(--shadow-panel);
+}
+
+.glass-input {
+  box-shadow: var(--shadow-input);
 }

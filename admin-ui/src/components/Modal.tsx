@@ -23,18 +23,18 @@ export function Modal({ titulo, onFechar, children }: Props) {
       role="presentation"
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-xl"
+        className="glass-panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-glass-border bg-glass-strong"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-text-primary">{titulo}</h2>
+        <div className="flex shrink-0 items-center justify-between border-b border-border-subtle px-5 py-4">
+          <h2 className="text-sm font-bold text-text-primary">{titulo}</h2>
           <button
             onClick={onFechar}
             aria-label="Fechar"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary transition hover:bg-surface-sunken"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary transition hover:bg-glass"
           >
             <X size={16} />
           </button>

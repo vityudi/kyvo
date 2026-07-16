@@ -81,12 +81,12 @@ export function Home({ onConversaCriada }: Props) {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-4">
-      <div className="flex flex-col items-center gap-3 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-lg font-bold text-accent-contrast">
+      <div className="flex flex-col items-center gap-3.5 text-center">
+        <div className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-deep text-xl font-extrabold text-accent-contrast shadow-[0_14px_30px_-10px_var(--accent-soft)]">
           K
         </div>
-        <h1 className="text-2xl font-semibold text-text-primary">Pronta quando você estiver</h1>
-        <p className="max-w-sm text-sm text-text-secondary">Mande a primeira mensagem — a conversa é criada automaticamente.</p>
+        <h1 className="font-serif text-[26px] italic tracking-tight text-text-primary">Pronta quando você estiver</h1>
+        <p className="max-w-sm text-[13.5px] text-text-secondary">Mande a primeira mensagem — a conversa é criada automaticamente.</p>
       </div>
 
       <div className="w-full max-w-2xl">
@@ -106,7 +106,7 @@ export function Home({ onConversaCriada }: Props) {
         )}
 
         {arquivo && (
-          <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-border-subtle bg-glass-strong px-3 py-2 text-xs text-text-secondary">
             <Paperclip size={14} />
             <span className="flex-1 truncate">{arquivo.name}</span>
             <button
@@ -119,7 +119,7 @@ export function Home({ onConversaCriada }: Props) {
           </div>
         )}
 
-        <div className="flex items-end gap-2 rounded-3xl border border-border bg-surface-sunken p-2 shadow-sm">
+        <div className="glass-input flex items-end gap-2 rounded-3xl border border-border-subtle bg-glass-strong p-2">
           <input
             ref={inputArquivoRef}
             type="file"
@@ -131,7 +131,7 @@ export function Home({ onConversaCriada }: Props) {
             onClick={() => inputArquivoRef.current?.click()}
             disabled={enviando || semContato}
             aria-label="Anexar arquivo"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-surface disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-glass disabled:opacity-40"
           >
             <Paperclip size={17} />
           </button>
@@ -147,7 +147,7 @@ export function Home({ onConversaCriada }: Props) {
             placeholder={semContato ? "Nenhum contato disponível ainda…" : "Enviar mensagem…"}
             rows={1}
             disabled={enviando || semContato}
-            className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
+            className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
           />
           <button
             onClick={handleEnviar}

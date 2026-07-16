@@ -143,12 +143,12 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 px-6 py-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-text-secondary">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-glass-strong text-xs font-bold text-text-secondary">
           {String(telegramChatId).slice(-2)}
         </div>
         <div>
-          <p className="text-sm font-semibold text-text-primary">Usuário #{telegramChatId}</p>
-          <p className="text-xs text-text-secondary">Telegram · chat {telegramChatId}</p>
+          <p className="text-[13.5px] font-bold text-text-primary">Usuário #{telegramChatId}</p>
+          <p className="text-[11.5px] text-text-secondary">Telegram · chat {telegramChatId}</p>
         </div>
       </header>
 
@@ -159,14 +159,14 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
           {!mensagens && !erroCarga && (
             <div className="flex flex-col gap-4">
               {[0, 1, 2].map((i) => (
-                <div key={i} className={`h-12 w-2/5 animate-pulse rounded-2xl bg-surface-sunken ${i % 2 ? "ml-auto" : ""}`} />
+                <div key={i} className={`h-12 w-2/5 animate-pulse rounded-2xl bg-glass-strong ${i % 2 ? "ml-auto" : ""}`} />
               ))}
             </div>
           )}
 
           {mensagens && mensagens.length === 0 && !erroCarga && (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
-              <ChatsCircle size={28} className="text-text-secondary" />
+              <ChatsCircle size={28} className="text-text-tertiary" />
               <p className="text-sm text-text-secondary">Nenhuma mensagem nessa conversa ainda.</p>
             </div>
           )}
@@ -178,18 +178,18 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
                   <button
                     onClick={carregarAntigas}
                     disabled={carregandoAntigas}
-                    className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-surface-sunken disabled:opacity-50"
+                    className="rounded-full border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-glass-strong disabled:opacity-50"
                   >
                     {carregandoAntigas ? "Carregando…" : "Carregar mensagens anteriores"}
                   </button>
                 </div>
               )}
 
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-4">
                 {mensagens.map((m) =>
                   m.role === "user" ? (
                     <div key={m.id} className="flex justify-end">
-                      <div className="max-w-[75%] rounded-2xl bg-accent px-4 py-2.5 text-sm leading-relaxed text-accent-contrast">
+                      <div className="max-w-[75%] rounded-[18px_18px_4px_18px] bg-accent px-3.5 py-2.5 text-[13.5px] leading-relaxed text-accent-contrast">
                         {m.anexos.length > 0 && (
                           <div className="mb-2 flex flex-col gap-2">
                             {m.anexos.map((anexo) => (
@@ -198,15 +198,15 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
                           </div>
                         )}
                         {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
-                        <p className="mt-1 text-[10px] text-accent-contrast/70">{formatarHorario(m.criadoEm)}</p>
+                        <p className="mt-1 text-[10px] opacity-70">{formatarHorario(m.criadoEm)}</p>
                       </div>
                     </div>
                   ) : (
-                    <div key={m.id} className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-accent-contrast">
+                    <div key={m.id} className="flex max-w-[75%] items-start gap-2.5">
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-deep text-[9.5px] font-extrabold text-accent-contrast">
                         K
                       </div>
-                      <div className="min-w-0 flex-1 text-sm leading-relaxed text-text-primary">
+                      <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-text-primary">
                         {m.anexos.length > 0 && (
                           <div className="mb-2 flex flex-col gap-2">
                             {m.anexos.map((anexo) => (
@@ -215,7 +215,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
                           </div>
                         )}
                         {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
-                        <p className="mt-1 text-[10px] text-text-secondary">{formatarHorario(m.criadoEm)}</p>
+                        <p className="mt-1 text-[10px] text-text-tertiary">{formatarHorario(m.criadoEm)}</p>
                       </div>
                     </div>
                   ),
@@ -236,7 +236,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
       <div className="px-4 pb-4 pt-1">
         <div className="mx-auto w-full max-w-3xl">
           {arquivo && (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-text-secondary">
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border-subtle bg-glass-strong px-3 py-2 text-xs text-text-secondary">
               <Paperclip size={14} />
               <span className="flex-1 truncate">{arquivo.name}</span>
               <button
@@ -249,7 +249,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
             </div>
           )}
 
-          <div className="flex items-end gap-2 rounded-3xl border border-border bg-surface-sunken p-2 shadow-sm">
+          <div className="glass-input flex items-end gap-2 rounded-3xl border border-border-subtle bg-glass-strong p-2">
             <input
               ref={inputArquivoRef}
               type="file"
@@ -261,7 +261,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
               onClick={() => inputArquivoRef.current?.click()}
               disabled={enviando}
               aria-label="Anexar arquivo"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-surface disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-glass disabled:opacity-40"
             >
               <Paperclip size={17} />
             </button>
@@ -277,7 +277,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
               placeholder="Enviar mensagem como este usuário…"
               rows={1}
               disabled={enviando}
-              className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
+              className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
             />
             <button
               onClick={handleEnviar}
@@ -288,7 +288,7 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
               <ArrowUp size={16} weight="bold" />
             </button>
           </div>
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-text-secondary">
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-text-tertiary">
             <ChatsCircle size={13} />A resposta do assistente é enviada de volta pro Telegram deste usuário também.
           </p>
         </div>

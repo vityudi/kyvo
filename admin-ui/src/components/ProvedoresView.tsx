@@ -94,8 +94,9 @@ export function ProvedoresView() {
   }
 
   return (
-    <div className="px-5 py-5">
-      <p className="mb-5 text-sm leading-relaxed text-text-secondary">
+    <div className="px-[30px] py-[26px]">
+      <p className="mb-1 text-base font-bold tracking-tight text-text-primary">Provedores de IA</p>
+      <p className="mb-5 text-[13px] leading-relaxed text-text-secondary">
         Escolha qual modelo responde às mensagens do assistente. A troca vale para a próxima mensagem, sem precisar
         reiniciar nada.
       </p>
@@ -145,72 +146,82 @@ function ProviderCard({
   onAtivar: () => void;
 }) {
   return (
-    <section className="rounded-card border border-border bg-surface p-6">
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <h2 className="text-[17px] font-semibold text-text-primary">
-          {NOME_PROVIDER[resumo.provider] ?? resumo.provider}
-        </h2>
+    <section
+      className={`rounded-2xl border p-4 ${
+        resumo.ativo ? "border-accent bg-accent-soft" : "border-border-subtle bg-glass-strong"
+      }`}
+    >
+      <div className="mb-4 flex items-center gap-3.5">
+        <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-glass-strong text-[13px] font-bold text-text-secondary">
+          {resumo.provider.slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[13.5px] font-bold text-text-primary">
+            {NOME_PROVIDER[resumo.provider] ?? resumo.provider}
+          </h2>
+        </div>
         {resumo.ativo ? (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-accent bg-accent px-2.5 py-1 text-xs font-medium text-accent-contrast">
+          <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold text-accent-contrast">
             <CheckCircle size={14} weight="fill" /> Ativo
           </span>
         ) : resumo.chaveConfigurada ? (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-secondary">
+          <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-input-bg px-2.5 py-1 text-[11px] font-bold text-text-secondary">
             <CircleDashed size={14} /> Configurado
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-danger/40 px-2.5 py-1 text-xs font-medium text-danger">
+          <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-danger/10 px-2.5 py-1 text-[11px] font-bold text-danger">
             <WarningCircle size={14} weight="fill" /> Sem chave
           </span>
         )}
       </div>
 
-      <div className="mb-4 flex flex-col gap-1">
-        <label htmlFor={`${resumo.provider}-modelo`} className="text-[13px] font-medium text-text-secondary">
+      <div className="mb-3.5 flex flex-col gap-1">
+        <label htmlFor={`${resumo.provider}-modelo`} className="text-[12.5px] font-semibold text-text-secondary">
           Modelo
         </label>
         <input
           id={`${resumo.provider}-modelo`}
           type="text"
+          autoComplete="off"
           value={state.modelo}
           onChange={(e) => onModeloChange(e.target.value)}
-          className="rounded-lg border border-border bg-surface-sunken px-3 py-2.5 text-sm text-text-primary focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+          className="rounded-[10px] border border-border-subtle bg-input-bg px-3 py-2.5 text-sm text-text-primary focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-accent"
         />
       </div>
 
-      <div className="mb-4 flex flex-col gap-1">
-        <label htmlFor={`${resumo.provider}-key`} className="text-[13px] font-medium text-text-secondary">
+      <div className="mb-3.5 flex flex-col gap-1">
+        <label htmlFor={`${resumo.provider}-key`} className="text-[12.5px] font-semibold text-text-secondary">
           API key
         </label>
         <input
           id={`${resumo.provider}-key`}
           type="password"
-          autoComplete="off"
+          autoComplete="new-password"
           value={state.apiKey}
           onChange={(e) => onApiKeyChange(e.target.value)}
           placeholder={resumo.chaveConfigurada ? "•••••••••••••• (deixe em branco para manter)" : "cole a API key aqui"}
-          className="rounded-lg border border-border bg-surface-sunken px-3 py-2.5 text-sm text-text-primary placeholder:text-text-secondary placeholder:opacity-70 focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-accent"
+          className="rounded-[10px] border border-border-subtle bg-input-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline focus:outline-2 focus:outline-offset-1 focus:outline-accent"
         />
-        <span className="text-xs text-text-secondary">A chave nunca é exibida de volta depois de salva.</span>
+        <span className="text-xs text-text-tertiary">A chave nunca é exibida de volta depois de salva.</span>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
-          className="rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-text-primary transition hover:bg-surface-sunken active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-[10px] border border-border-subtle bg-glass px-4 py-2.5 text-[12.5px] font-semibold text-text-primary transition hover:bg-glass-strong active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={onSalvar}
           disabled={state.salvando}
         >
           {state.salvando ? "Salvando…" : "Salvar"}
         </button>
         <button
-          className="rounded-lg border border-border bg-surface px-4 py-2.5 text-[13px] font-medium text-text-primary transition hover:bg-surface-sunken active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-[10px] border border-border-subtle bg-glass px-4 py-2.5 text-[12.5px] font-semibold text-text-primary transition hover:bg-glass-strong active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={onTestar}
           disabled={state.testando || !resumo.chaveConfigurada}
         >
           {state.testando ? "Testando…" : "Testar conexão"}
         </button>
         <button
-          className="rounded-lg border border-accent bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-contrast transition hover:brightness-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-[10px] bg-accent px-4 py-2.5 text-[12.5px] font-semibold text-accent-contrast transition hover:brightness-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={onAtivar}
           disabled={state.ativando || resumo.ativo || !resumo.chaveConfigurada}
         >
