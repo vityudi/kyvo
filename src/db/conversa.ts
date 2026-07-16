@@ -98,6 +98,27 @@ export async function iniciarNovaConversa(usuarioId: string): Promise<Conversa> 
   return arquivarAtivaECriarNova(usuarioId);
 }
 
+/**
+ * Define o titulo de uma conversa, sem sobrescrever um ja existente - usado
+ * pela geracao automatica de titulo (ver tituloConversa.ts) apos o primeiro
+ * turno, tanto pra nao pisar num titulo definido manualmente quanto pra
+ * evitar corrida caso a funcao seja chamada mais de uma vez.
+ */
+export async function definirTituloSeAusente(conversaId: string, titulo: string): Promise<void> {
+  await pool.query("update conversa set titulo = $2 where id = $1 and titulo is null", [conversaId, titulo]);
+}
+
+/**
+ * Apaga uma conversa e tudo que depende dela (mensagens, anexos - via `on
+ * delete cascade` nas FKs, ver migrations/0001_init.sql). Retorna false se a
+ * conversa nao existia. Se a conversa apagada era a ativa do usuario, a
+ * proxima mensagem dele so cria uma nova (obterOuCriarConversaAtiva).
+ */
+export async function deletarConversa(conversaId: string): Promise<boolean> {
+  const { rowCount } = await pool.query("delete from conversa where id = $1", [conversaId]);
+  return (rowCount ?? 0) > 0;
+}
+
 /** Resolve usuario/telegram_chat_id a partir de uma conversa - usado pela rota admin de "enviar como usuario". */
 export async function obterConversaComUsuario(
   conversaId: string,

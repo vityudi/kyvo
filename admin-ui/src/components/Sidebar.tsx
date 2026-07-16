@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChatCircle, GearSix, MagnifyingGlass, PencilSimpleLine, SidebarSimple } from "@phosphor-icons/react";
-import { listarConversas, type ConversaResumo } from "../api";
+import { Check, ChatCircle, GearSix, MagnifyingGlass, PencilSimpleLine, SidebarSimple, Trash, X } from "@phosphor-icons/react";
+import { deletarConversa, listarConversas, type ConversaResumo } from "../api";
 import { formatarTempoRelativo, rotuloGrupoData } from "../lib/tempo";
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   onNovaConversa: () => void;
   onAbrirConfig: () => void;
   onFechar: () => void;
+  onConversaDeletada: (conversaId: string) => void;
 }
 
 /**
@@ -24,10 +25,13 @@ export function Sidebar({
   onNovaConversa,
   onAbrirConfig,
   onFechar,
+  onConversaDeletada,
 }: Props) {
   const [conversas, setConversas] = useState<ConversaResumo[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
+  const [apagandoId, setApagandoId] = useState<string | null>(null);
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -58,6 +62,20 @@ export function Sidebar({
     if (!termo) return conversas;
     return conversas.filter((c) => String(c.telegramChatId).includes(termo));
   }, [conversas, busca]);
+
+  async function handleApagar(conversaId: string) {
+    setApagandoId(conversaId);
+    try {
+      await deletarConversa(conversaId);
+      setConversas((atual) => atual?.filter((c) => c.id !== conversaId) ?? atual);
+      onConversaDeletada(conversaId);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApagandoId(null);
+      setConfirmandoId(null);
+    }
+  }
 
   const grupos = useMemo(() => {
     if (!filtradas) return null;
@@ -136,11 +154,13 @@ export function Sidebar({
               <ul className="flex flex-col gap-0.5">
                 {itens.map((c) => {
                   const ativa = c.id === conversaSelecionadaId;
+                  const confirmando = confirmandoId === c.id;
                   return (
-                    <li key={c.id}>
+                    <li key={c.id} className="group/item relative">
                       <button
                         onClick={() => onSelecionar(c)}
-                        className={`group flex w-full flex-col gap-0.5 rounded-[11px] px-2.5 py-[7px] text-left text-[13px] transition ${
+                        disabled={apagandoId === c.id}
+                        className={`flex w-full flex-col gap-0.5 rounded-[11px] py-[7px] pl-2.5 pr-8 text-left text-[13px] transition disabled:opacity-50 ${
                           ativa ? "bg-accent-soft text-text-primary" : "text-text-primary hover:bg-glass-strong"
                         }`}
                       >
@@ -154,18 +174,50 @@ export function Sidebar({
                             )}
                           </span>
                           <span
-                            className={`shrink-0 text-[10.5px] text-text-tertiary ${ativa ? "" : "opacity-0 group-hover:opacity-100"}`}
+                            className={`shrink-0 text-[10.5px] text-text-tertiary ${
+                              ativa || confirmando ? "" : "opacity-0 group-hover/item:opacity-100"
+                            } ${confirmando ? "invisible" : ""}`}
                           >
                             {formatarTempoRelativo(c.ultimaEm)}
                           </span>
                         </span>
                         {c.ultimaMensagem && (
                           <span className="min-w-0 truncate text-[11.5px] text-text-tertiary">
-                            {c.ultimaRole === "assistant" ? "Você: " : ""}
+                            {c.ultimaRole === "user" ? "Você: " : ""}
                             {c.ultimaMensagem}
                           </span>
                         )}
                       </button>
+
+                      {confirmando ? (
+                        <span className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                          <button
+                            onClick={() => handleApagar(c.id)}
+                            aria-label="Confirmar exclusão"
+                            title="Confirmar exclusão"
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-danger transition hover:bg-glass-strong"
+                          >
+                            <Check size={13} weight="bold" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmandoId(null)}
+                            aria-label="Cancelar exclusão"
+                            title="Cancelar exclusão"
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-text-secondary transition hover:bg-glass-strong"
+                          >
+                            <X size={13} weight="bold" />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmandoId(c.id)}
+                          aria-label="Apagar conversa"
+                          title="Apagar conversa"
+                          className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-text-tertiary opacity-0 transition hover:bg-glass-strong hover:text-danger group-hover/item:opacity-100"
+                        >
+                          <Trash size={13} />
+                        </button>
+                      )}
                     </li>
                   );
                 })}

@@ -1,5 +1,6 @@
 import { criarAnexo, type NovoAnexo } from "../db/anexo.js";
 import { listarCategorias } from "../db/categoria.js";
+import { definirTituloSeAusente } from "../db/conversa.js";
 import { listarMetasAtivas } from "../db/meta.js";
 import { carregarHistorico, salvarMensagemUsuario, salvarRespostaAssistente } from "../db/mensagem.js";
 import { listarOrcamentos } from "../db/orcamento.js";
@@ -8,6 +9,7 @@ import { listarRegras } from "../db/regraCategorizacao.js";
 import { getLlmClient } from "./llm/index.js";
 import type { ChatMessage, ContentPart } from "./llm/types.js";
 import { logger } from "./logger.js";
+import { gerarTituloConversa } from "./tituloConversa.js";
 import { executeTool, toolDefinitions } from "./tools.js";
 
 const MAX_TOOL_ITERATIONS = 6;
@@ -224,6 +226,15 @@ export async function processarMensagem(conversaId: string, usuarioId: string, t
   }
 
   await salvarRespostaAssistente(usuarioId, conversaId, textoResposta);
+
+  // So no primeiro turno da conversa (sem historico previo) - gera em
+  // background pra nao atrasar a resposta ao usuario; definirTituloSeAusente
+  // e um no-op se a conversa ja tiver titulo.
+  if (historico.length === 0) {
+    gerarTituloConversa(textoUsuario, textoResposta)
+      .then((titulo) => (titulo ? definirTituloSeAusente(conversaId, titulo) : undefined))
+      .catch((err) => logger.error(err, "falha ao gerar titulo da conversa"));
+  }
 
   return textoResposta;
 }

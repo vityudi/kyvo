@@ -7,7 +7,7 @@ import fastifyStatic from "@fastify/static";
 import type { FastifyInstance } from "fastify";
 import { env } from "../config/env.js";
 import { obterAnexoParaDownload, type TipoAnexo } from "../db/anexo.js";
-import { iniciarNovaConversa, listarConversas, obterConversaComUsuario } from "../db/conversa.js";
+import { deletarConversa, iniciarNovaConversa, listarConversas, obterConversaComUsuario } from "../db/conversa.js";
 import {
   ativarProvedor,
   listarProvedores,
@@ -195,6 +195,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { usuarioId: string } }>("/admin/api/usuarios/:usuarioId/conversas", async (request) =>
     iniciarNovaConversa(request.params.usuarioId),
   );
+
+  app.delete<{ Params: { conversaId: string } }>("/admin/api/conversas/:conversaId", async (request, reply) => {
+    const apagada = await deletarConversa(request.params.conversaId);
+    if (!apagada) {
+      return reply.code(404).send({ ok: false, erro: "conversa nao encontrada" });
+    }
+    return { ok: true };
+  });
 
   app.get<{ Params: { conversaId: string }; Querystring: { antes?: string; limite?: string } }>(
     "/admin/api/conversas/:conversaId/mensagens",

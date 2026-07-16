@@ -25,6 +25,10 @@ export function App() {
     setAtualizarSinal((n) => n + 1);
   }
 
+  function handleConversaDeletada(conversaId: string) {
+    setConversaSelecionada((atual) => (atual?.id === conversaId ? null : atual));
+  }
+
   return (
     <div className="flex h-[100dvh] w-full gap-3.5 overflow-hidden p-3.5">
       {sidebarAberta && (
@@ -39,6 +43,7 @@ export function App() {
             onNovaConversa={handleNovaConversa}
             onAbrirConfig={() => setConfiguracoesAbertas(true)}
             onFechar={() => setSidebarAberta(false)}
+            onConversaDeletada={handleConversaDeletada}
           />
         </div>
       )}

@@ -190,6 +190,10 @@ export function enviarMensagem(conversaId: string, texto: string, arquivo?: File
   });
 }
 
+export function deletarConversa(conversaId: string): Promise<ApiOk> {
+  return request(`/admin/api/conversas/${conversaId}`, { method: "DELETE" });
+}
+
 export function urlAnexo(anexoId: string): string {
   return `/admin/api/anexos/${anexoId}`;
 }

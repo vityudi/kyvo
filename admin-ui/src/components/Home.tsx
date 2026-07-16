@@ -85,7 +85,7 @@ export function Home({ onConversaCriada }: Props) {
         <div className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-deep text-xl font-extrabold text-accent-contrast shadow-[0_14px_30px_-10px_var(--accent-soft)]">
           K
         </div>
-        <h1 className="font-serif text-[26px] italic tracking-tight text-text-primary">Pronta quando você estiver</h1>
+        <h1 className="font-serif text-[26px] italic tracking-tight text-text-primary">Pronto quando você estiver</h1>
         <p className="max-w-sm text-[13.5px] text-text-secondary">Mande a primeira mensagem — a conversa é criada automaticamente.</p>
       </div>
 
