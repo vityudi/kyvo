@@ -28,8 +28,12 @@ const envSchema = z.object({
   // forte antes de expor o painel fora de localhost.
   ADMIN_PASSWORD: z.string().min(1, "ADMIN_PASSWORD e obrigatoria - veja .env.example"),
 
-  TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN e obrigatoria - veja .env.example"),
-  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  // Bootstrap opcional (dev local): seeda o bot do Telegram no primeiro boot
+  // via `npm run seed:telegram-config` - evita ter que abrir /admin so pra
+  // rodar localmente. Sem efeito em runtime normal (o bot sempre le do banco,
+  // configuravel via painel /admin).
+  TELEGRAM_BOT_TOKEN_BOOTSTRAP: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET_BOOTSTRAP: z.string().optional(),
 
   // Anexos de mensagem (imagem/audio/documento) - armazenados no filesystem
   // local (sem infra de nuvem hoje, ver src/lib/storage.ts).

@@ -16,6 +16,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "seed:conhecimento": "tsx src/db/seedBaseConhecimento.ts",
     "seed:llm-config": "tsx src/db/seedLlmConfig.ts",
+    "seed:telegram-config": "tsx src/db/seedTelegramConfig.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

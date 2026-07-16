@@ -1,8 +1,22 @@
 import { env } from "../config/env.js";
+import { getTelegramConfig } from "../db/telegramConfig.js";
 import { logger } from "./logger.js";
 
 const TELEGRAM_API_BASE = "https://api.telegram.org";
 const TELEGRAM_FILE_BASE = "https://api.telegram.org/file";
+
+export class TelegramNaoConfiguradoError extends Error {
+  constructor() {
+    super("Nenhum bot do Telegram esta configurado. Configure o token em /admin.");
+  }
+}
+
+/** Bot token em uso agora - sempre lido do banco (ver src/db/telegramConfig.ts). */
+async function obterBotToken(): Promise<string> {
+  const config = await getTelegramConfig();
+  if (!config) throw new TelegramNaoConfiguradoError();
+  return config.botToken;
+}
 
 /**
  * Cliente minimo para a Bot API do Telegram - so o necessario para o
@@ -10,7 +24,8 @@ const TELEGRAM_FILE_BASE = "https://api.telegram.org/file";
  * a Bot API e HTTP simples o suficiente para nao justificar uma lib inteira.
  */
 export async function sendTelegramMessage(chatId: number, text: string): Promise<void> {
-  const url = `${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+  const botToken = await obterBotToken();
+  const url = `${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`;
 
   const response = await fetch(url, {
     method: "POST",
@@ -22,6 +37,31 @@ export async function sendTelegramMessage(chatId: number, text: string): Promise
     const body = await response.text();
     logger.error({ chatId, status: response.status, body }, "falha ao enviar mensagem no Telegram");
     throw new Error(`Telegram sendMessage falhou com status ${response.status}`);
+  }
+}
+
+/**
+ * Registra a URL publica que o Telegram deve chamar a cada update (ex.: a URL
+ * de um tunel ngrok em dev local). Chamado a partir do painel /admin - nao ha
+ * caminho automatico porque a URL muda a cada sessao de tunel.
+ */
+export async function setTelegramWebhook(webhookUrl: string): Promise<void> {
+  const config = await getTelegramConfig();
+  if (!config) throw new TelegramNaoConfiguradoError();
+
+  const url = `${TELEGRAM_API_BASE}/bot${config.botToken}/setWebhook`;
+  const body: { url: string; secret_token?: string } = { url: webhookUrl };
+  if (config.webhookSecret) body.secret_token = config.webhookSecret;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const responseBody = (await response.json()) as { ok?: boolean; description?: string };
+  if (!response.ok || !responseBody.ok) {
+    throw new Error(responseBody.description ?? `Telegram setWebhook falhou com status ${response.status}`);
   }
 }
 
@@ -60,7 +100,8 @@ export async function baixarArquivoTelegram(
     throw new ArquivoTelegramGrandeDemaisError(tamanhoConhecido);
   }
 
-  const getFileUrl = `${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`;
+  const botToken = await obterBotToken();
+  const getFileUrl = `${TELEGRAM_API_BASE}/bot${botToken}/getFile?file_id=${fileId}`;
   const getFileResponse = await fetch(getFileUrl);
   if (!getFileResponse.ok) {
     throw new Error(`Telegram getFile falhou com status ${getFileResponse.status}`);
@@ -74,7 +115,7 @@ export async function baixarArquivoTelegram(
     throw new ArquivoTelegramGrandeDemaisError(getFileBody.result.file_size);
   }
 
-  const downloadUrl = `${TELEGRAM_FILE_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/${filePath}`;
+  const downloadUrl = `${TELEGRAM_FILE_BASE}/bot${botToken}/${filePath}`;
   const downloadResponse = await fetch(downloadUrl);
   if (!downloadResponse.ok) {
     throw new Error(`download de arquivo do Telegram falhou com status ${downloadResponse.status}`);
@@ -112,17 +153,28 @@ export interface TelegramBotStatus {
  * (util pra diagnosticar sem precisar olhar log do servidor).
  */
 export async function getTelegramBotStatus(): Promise<TelegramBotStatus> {
+  const config = await getTelegramConfig();
+  if (!config) {
+    return {
+      conectado: false,
+      webhookUrl: null,
+      webhookSecretConfigurado: false,
+      ultimoErroWebhook: null,
+      erro: "Nenhum bot configurado - defina o token em /admin.",
+    };
+  }
+
   try {
     const [meResponse, webhookResponse] = await Promise.all([
-      fetch(`${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/getMe`),
-      fetch(`${TELEGRAM_API_BASE}/bot${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`),
+      fetch(`${TELEGRAM_API_BASE}/bot${config.botToken}/getMe`),
+      fetch(`${TELEGRAM_API_BASE}/bot${config.botToken}/getWebhookInfo`),
     ]);
 
     if (!meResponse.ok) {
       return {
         conectado: false,
         webhookUrl: null,
-        webhookSecretConfigurado: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+        webhookSecretConfigurado: Boolean(config.webhookSecret),
         ultimoErroWebhook: null,
         erro: `Telegram getMe falhou com status ${meResponse.status}`,
       };
@@ -143,14 +195,14 @@ export async function getTelegramBotStatus(): Promise<TelegramBotStatus> {
       botUsername: meBody.result?.username,
       botNome: meBody.result?.first_name,
       webhookUrl: webhookBody?.result?.url || null,
-      webhookSecretConfigurado: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+      webhookSecretConfigurado: Boolean(config.webhookSecret),
       ultimoErroWebhook: webhookBody?.result?.last_error_message ?? null,
     };
   } catch (err) {
     return {
       conectado: false,
       webhookUrl: null,
-      webhookSecretConfigurado: Boolean(env.TELEGRAM_WEBHOOK_SECRET),
+      webhookSecretConfigurado: Boolean(config.webhookSecret),
       ultimoErroWebhook: null,
       erro: err instanceof Error ? err.message : String(err),
     };

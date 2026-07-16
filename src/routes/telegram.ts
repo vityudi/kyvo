@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { AnexoPendente, TurnoUsuario } from "../lib/agent.js";
 import { processarMensagem } from "../lib/agent.js";
-import { env } from "../config/env.js";
+import { getTelegramConfig } from "../db/telegramConfig.js";
 import { iniciarNovaConversa, obterOuCriarConversaAtiva } from "../db/conversa.js";
 import { obterOuCriarUsuario } from "../db/usuario.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
@@ -104,9 +104,15 @@ async function processarAnexos(message: NonNullable<TelegramUpdate["message"]>):
 
 export async function telegramRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: TelegramUpdate }>("/webhook/telegram", async (request, reply) => {
-    if (env.TELEGRAM_WEBHOOK_SECRET) {
+    const telegramConfig = await getTelegramConfig();
+    if (!telegramConfig) {
+      logger.warn({ ip: request.ip }, "webhook do Telegram recebido sem bot configurado");
+      return reply.code(503).send({ error: "bot nao configurado" });
+    }
+
+    if (telegramConfig.webhookSecret) {
       const secret = request.headers["x-telegram-bot-api-secret-token"];
-      if (secret !== env.TELEGRAM_WEBHOOK_SECRET) {
+      if (secret !== telegramConfig.webhookSecret) {
         logger.warn({ ip: request.ip }, "webhook do Telegram rejeitado - secret invalido");
         return reply.code(401).send({ error: "unauthorized" });
       }

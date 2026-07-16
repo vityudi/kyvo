@@ -16,6 +16,7 @@ import {
   type LlmProvider,
 } from "../db/llmConfig.js";
 import { carregarMensagensPaginado } from "../db/mensagem.js";
+import { obterResumoTelegramConfig, upsertTelegramConfig } from "../db/telegramConfig.js";
 import type { AnexoPendente, TurnoUsuario } from "../lib/agent.js";
 import { processarMensagem } from "../lib/agent.js";
 import { createAnthropicClient } from "../lib/llm/anthropicClient.js";
@@ -23,7 +24,7 @@ import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
 import type { ContentPart } from "../lib/llm/types.js";
 import { salvarArquivo, streamArquivo } from "../lib/storage.js";
-import { getTelegramBotStatus, sendTelegramMessage } from "../lib/telegram.js";
+import { getTelegramBotStatus, sendTelegramMessage, setTelegramWebhook } from "../lib/telegram.js";
 
 function tipoAnexoPorMime(mimeType: string): TipoAnexo {
   if (mimeType.startsWith("image/")) return "imagem";
@@ -126,6 +127,35 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/admin/api/telegram/status", async () => getTelegramBotStatus());
+
+  app.get("/admin/api/telegram/config", async () => obterResumoTelegramConfig());
+
+  app.put<{ Body: { botToken?: string; webhookSecret?: string } }>(
+    "/admin/api/telegram/config",
+    async (request, reply) => {
+      const { botToken, webhookSecret } = request.body;
+      if (!botToken && !webhookSecret) {
+        return reply.code(400).send({ ok: false, erro: "informe o bot token e/ou o secret do webhook" });
+      }
+      await upsertTelegramConfig(botToken, webhookSecret);
+      return { ok: true };
+    },
+  );
+
+  app.post<{ Body: { url: string } }>("/admin/api/telegram/webhook", async (request, reply) => {
+    const { url } = request.body;
+    if (!url) {
+      return reply.code(400).send({ ok: false, erro: "informe a URL publica do webhook" });
+    }
+
+    try {
+      const urlCompleta = url.endsWith("/webhook/telegram") ? url : `${url.replace(/\/$/, "")}/webhook/telegram`;
+      await setTelegramWebhook(urlCompleta);
+      return { ok: true };
+    } catch (err) {
+      return reply.code(400).send({ ok: false, erro: err instanceof Error ? err.message : String(err) });
+    }
+  });
 
   app.get("/admin/api/integracoes", async () => ({
     groqConfigurado: Boolean(env.GROQ_API_KEY),

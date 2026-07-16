@@ -67,6 +67,30 @@ export function obterStatusTelegram(): Promise<TelegramStatus> {
   return request("/admin/api/telegram/status");
 }
 
+export interface TelegramConfigResumo {
+  botTokenConfigurado: boolean;
+  webhookSecretConfigurado: boolean;
+  atualizadoEm: string;
+}
+
+export function obterConfigTelegram(): Promise<TelegramConfigResumo> {
+  return request("/admin/api/telegram/config");
+}
+
+export function salvarConfigTelegram(botToken?: string, webhookSecret?: string): Promise<ApiOk> {
+  return request("/admin/api/telegram/config", {
+    method: "PUT",
+    body: JSON.stringify({ botToken: botToken || undefined, webhookSecret: webhookSecret || undefined }),
+  });
+}
+
+export function registrarWebhookTelegram(url: string): Promise<ApiOk | ApiErro> {
+  return request<ApiOk | ApiErro>("/admin/api/telegram/webhook", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  }).catch((err: Error): ApiErro => ({ ok: false, erro: err.message }));
+}
+
 export interface IntegracoesStatus {
   groqConfigurado: boolean;
   pluggyConfigurado: boolean;
