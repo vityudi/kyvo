@@ -140,23 +140,31 @@ export function Sidebar({
                     <li key={c.id}>
                       <button
                         onClick={() => onSelecionar(c)}
-                        className={`group flex w-full items-center gap-2 rounded-[11px] px-2.5 py-[9px] text-left text-[13px] transition ${
+                        className={`group flex w-full flex-col gap-0.5 rounded-[11px] px-2.5 py-[7px] text-left text-[13px] transition ${
                           ativa ? "bg-accent-soft text-text-primary" : "text-text-primary hover:bg-glass-strong"
                         }`}
                       >
-                        <span className={`min-w-0 flex-1 truncate ${ativa ? "font-bold" : "font-medium"}`}>
-                          {c.titulo ?? `Usuário #${c.telegramChatId}`}
-                          {c.status === "arquivada" && (
-                            <span className="ml-1.5 align-middle text-[10px] font-normal text-text-tertiary">
-                              arquivada
-                            </span>
-                          )}
+                        <span className="flex w-full items-center gap-2">
+                          <span className={`min-w-0 flex-1 truncate ${ativa ? "font-bold" : "font-medium"}`}>
+                            {c.titulo ?? `Usuário #${c.telegramChatId}`}
+                            {c.status === "arquivada" && (
+                              <span className="ml-1.5 align-middle text-[10px] font-normal text-text-tertiary">
+                                arquivada
+                              </span>
+                            )}
+                          </span>
+                          <span
+                            className={`shrink-0 text-[10.5px] text-text-tertiary ${ativa ? "" : "opacity-0 group-hover:opacity-100"}`}
+                          >
+                            {formatarTempoRelativo(c.ultimaEm)}
+                          </span>
                         </span>
-                        <span
-                          className={`shrink-0 text-[10.5px] text-text-tertiary ${ativa ? "" : "opacity-0 group-hover:opacity-100"}`}
-                        >
-                          {formatarTempoRelativo(c.ultimaEm)}
-                        </span>
+                        {c.ultimaMensagem && (
+                          <span className="min-w-0 truncate text-[11.5px] text-text-tertiary">
+                            {c.ultimaRole === "assistant" ? "Você: " : ""}
+                            {c.ultimaMensagem}
+                          </span>
+                        )}
                       </button>
                     </li>
                   );

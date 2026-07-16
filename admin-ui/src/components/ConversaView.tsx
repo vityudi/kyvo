@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
+  CaretRight,
   ChatsCircle,
   File,
   FilePdf,
@@ -186,9 +187,11 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
               )}
 
               <div className="flex flex-col gap-4">
-                {mensagens.map((m) =>
-                  m.role === "user" ? (
-                    <div key={m.id} className="flex justify-end">
+                {mensagens.map((m) => {
+                  const transcricoes = m.anexos.filter((a) => a.tipo === "audio" && a.transcricao);
+
+                  return m.role === "user" ? (
+                    <div key={m.id} className="flex flex-col items-end gap-1">
                       <div className="max-w-[75%] rounded-[18px_18px_4px_18px] bg-accent px-3.5 py-2.5 text-[13.5px] leading-relaxed text-accent-contrast">
                         {m.anexos.length > 0 && (
                           <div className="mb-2 flex flex-col gap-2">
@@ -200,26 +203,34 @@ export function ConversaView({ conversaId, telegramChatId, onMensagemEnviada }: 
                         {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
                         <p className="mt-1 text-[10px] opacity-70">{formatarHorario(m.criadoEm)}</p>
                       </div>
+                      {transcricoes.map((anexo) => (
+                        <TranscricaoAudio key={anexo.id} transcricao={anexo.transcricao!} />
+                      ))}
                     </div>
                   ) : (
-                    <div key={m.id} className="flex max-w-[75%] items-start gap-2.5">
-                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-deep text-[9.5px] font-extrabold text-accent-contrast">
-                        K
+                    <div key={m.id} className="flex max-w-[75%] flex-col gap-1">
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-deep text-[9.5px] font-extrabold text-accent-contrast">
+                          K
+                        </div>
+                        <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-text-primary">
+                          {m.anexos.length > 0 && (
+                            <div className="mb-2 flex flex-col gap-2">
+                              {m.anexos.map((anexo) => (
+                                <AnexoPreview key={anexo.id} anexo={anexo} onAmpliarImagem={setImagemAmpliada} />
+                              ))}
+                            </div>
+                          )}
+                          {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
+                          <p className="mt-1 text-[10px] text-text-tertiary">{formatarHorario(m.criadoEm)}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-text-primary">
-                        {m.anexos.length > 0 && (
-                          <div className="mb-2 flex flex-col gap-2">
-                            {m.anexos.map((anexo) => (
-                              <AnexoPreview key={anexo.id} anexo={anexo} onAmpliarImagem={setImagemAmpliada} />
-                            ))}
-                          </div>
-                        )}
-                        {m.conteudo && <p className="whitespace-pre-wrap">{m.conteudo}</p>}
-                        <p className="mt-1 text-[10px] text-text-tertiary">{formatarHorario(m.criadoEm)}</p>
-                      </div>
+                      {transcricoes.map((anexo) => (
+                        <TranscricaoAudio key={anexo.id} transcricao={anexo.transcricao!} />
+                      ))}
                     </div>
-                  ),
-                )}
+                  );
+                })}
               </div>
             </>
           )}
@@ -315,12 +326,7 @@ function AnexoPreview({ anexo, onAmpliarImagem }: { anexo: Anexo; onAmpliarImage
   }
 
   if (anexo.tipo === "audio") {
-    return (
-      <div className="flex flex-col gap-1">
-        <audio controls src={url} className="h-9 max-w-full" />
-        {anexo.transcricao && <p className="text-xs italic opacity-80">"{anexo.transcricao}"</p>}
-      </div>
-    );
+    return <audio controls src={url} className="h-9 max-w-full" />;
   }
 
   const Icone = anexo.mimeType === "application/pdf" ? FilePdf : File;
@@ -334,6 +340,27 @@ function AnexoPreview({ anexo, onAmpliarImagem }: { anexo: Anexo; onAmpliarImage
       <Icone size={18} />
       <span className="truncate">{anexo.nomeArquivo ?? "Documento"}</span>
     </a>
+  );
+}
+
+function TranscricaoAudio({ transcricao }: { transcricao: string }) {
+  const [aberta, setAberta] = useState(false);
+
+  return (
+    <div className="max-w-[75%] text-[11.5px]">
+      <button
+        onClick={() => setAberta((a) => !a)}
+        className="flex items-center gap-1 text-text-tertiary transition hover:text-text-secondary"
+      >
+        <CaretRight size={11} weight="bold" className={`transition-transform ${aberta ? "rotate-90" : ""}`} />
+        Transcrição do áudio
+      </button>
+      {aberta && (
+        <p className="mt-1 whitespace-pre-wrap rounded-lg bg-glass-strong px-2.5 py-2 italic text-text-secondary">
+          "{transcricao}"
+        </p>
+      )}
+    </div>
   );
 }
 
