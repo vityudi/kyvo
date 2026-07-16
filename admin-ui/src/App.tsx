@@ -1,213 +1,91 @@
-import { useEffect, useState } from "react";
-import { CheckCircle, CircleDashed, WarningCircle } from "@phosphor-icons/react";
-import { ativarProvedor, listarProvedores, salvarProvedor, testarProvedor, type ProvedorResumo } from "./api";
+import { useState, type ReactNode } from "react";
+import { ChatsCircle, GearSix } from "@phosphor-icons/react";
+import { ConversasSidebar } from "./components/ConversasSidebar";
+import { ConversaView } from "./components/ConversaView";
+import { ProvedoresView } from "./components/ProvedoresView";
+import type { ConversaResumo } from "./api";
 
-const NOME_PROVIDER: Record<string, string> = {
-  anthropic: "Anthropic",
-  deepseek: "DeepSeek",
-};
-
-interface ProviderCardState {
-  modelo: string;
-  apiKey: string;
-  salvando: boolean;
-  testando: boolean;
-  ativando: boolean;
-  status: { tipo: "ok" | "erro"; texto: string } | null;
-}
+type View = "conversas" | "provedores";
 
 export function App() {
-  const [provedores, setProvedores] = useState<ProvedorResumo[] | null>(null);
-  const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
-  const [cardState, setCardState] = useState<Record<string, ProviderCardState>>({});
-
-  async function carregar() {
-    try {
-      const lista = await listarProvedores();
-      setProvedores(lista);
-      setCardState((atual) => {
-        const proximo = { ...atual };
-        for (const p of lista) {
-          if (!proximo[p.provider]) {
-            proximo[p.provider] = {
-              modelo: p.modelo,
-              apiKey: "",
-              salvando: false,
-              testando: false,
-              ativando: false,
-              status: null,
-            };
-          }
-        }
-        return proximo;
-      });
-    } catch (err) {
-      setErroCarregamento(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  useEffect(() => {
-    carregar();
-  }, []);
-
-  function updateCard(provider: string, patch: Partial<ProviderCardState>) {
-    setCardState((atual) => ({ ...atual, [provider]: { ...atual[provider], ...patch } }));
-  }
-
-  async function handleSalvar(provider: "anthropic" | "deepseek") {
-    const state = cardState[provider];
-    if (!state) return;
-    updateCard(provider, { salvando: true, status: null });
-    try {
-      await salvarProvedor(provider, state.modelo, state.apiKey);
-      updateCard(provider, { apiKey: "", status: { tipo: "ok", texto: "Salvo." } });
-      await carregar();
-    } catch (err) {
-      updateCard(provider, { status: { tipo: "erro", texto: err instanceof Error ? err.message : String(err) } });
-    } finally {
-      updateCard(provider, { salvando: false });
-    }
-  }
-
-  async function handleTestar(provider: "anthropic" | "deepseek") {
-    updateCard(provider, { testando: true, status: null });
-    const resultado = await testarProvedor(provider);
-    updateCard(provider, {
-      testando: false,
-      status: resultado.ok
-        ? { tipo: "ok", texto: "Conexão funcionando." }
-        : { tipo: "erro", texto: resultado.erro },
-    });
-  }
-
-  async function handleAtivar(provider: "anthropic" | "deepseek") {
-    updateCard(provider, { ativando: true, status: null });
-    try {
-      await ativarProvedor(provider);
-      updateCard(provider, { status: { tipo: "ok", texto: "Provedor ativado." } });
-      await carregar();
-    } catch (err) {
-      updateCard(provider, { status: { tipo: "erro", texto: err instanceof Error ? err.message : String(err) } });
-    } finally {
-      updateCard(provider, { ativando: false });
-    }
-  }
+  const [view, setView] = useState<View>("conversas");
+  const [conversaSelecionada, setConversaSelecionada] = useState<ConversaResumo | null>(null);
+  const [atualizarSinal, setAtualizarSinal] = useState(0);
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <p className="eyebrow">Kyvo</p>
-        <h1>Provedor de IA</h1>
-        <p>Escolha qual modelo responde às mensagens do assistente. A troca vale para a próxima mensagem, sem precisar reiniciar nada.</p>
-      </header>
+    <div className="flex h-[100dvh] bg-bg">
+      <nav className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border py-4">
+        <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-contrast">
+          K
+        </div>
+        <NavButton
+          label="Conversas"
+          ativo={view === "conversas"}
+          onClick={() => setView("conversas")}
+          icon={<ChatsCircle size={20} weight={view === "conversas" ? "fill" : "regular"} />}
+        />
+        <NavButton
+          label="Provedores"
+          ativo={view === "provedores"}
+          onClick={() => setView("provedores")}
+          icon={<GearSix size={20} weight={view === "provedores" ? "fill" : "regular"} />}
+        />
+      </nav>
 
-      {erroCarregamento && <p className="page-error">Falha ao carregar: {erroCarregamento}</p>}
-      {!provedores && !erroCarregamento && <p className="page-loading">Carregando…</p>}
-
-      {provedores && (
-        <div className="provider-list">
-          {provedores.map((p) => {
-            const state = cardState[p.provider];
-            if (!state) return null;
-            return (
-              <ProviderCard
-                key={p.provider}
-                resumo={p}
-                state={state}
-                onModeloChange={(modelo) => updateCard(p.provider, { modelo })}
-                onApiKeyChange={(apiKey) => updateCard(p.provider, { apiKey })}
-                onSalvar={() => handleSalvar(p.provider)}
-                onTestar={() => handleTestar(p.provider)}
-                onAtivar={() => handleAtivar(p.provider)}
-              />
-            );
-          })}
+      {view === "conversas" && (
+        <div className="w-80 shrink-0 border-r border-border">
+          <ConversasSidebar
+            usuarioSelecionadoId={conversaSelecionada?.usuarioId ?? null}
+            onSelecionar={setConversaSelecionada}
+            atualizarSinal={atualizarSinal}
+          />
         </div>
       )}
+
+      <main className="min-w-0 flex-1">
+        {view === "conversas" ? (
+          conversaSelecionada ? (
+            <ConversaView
+              key={conversaSelecionada.usuarioId}
+              usuarioId={conversaSelecionada.usuarioId}
+              telegramChatId={conversaSelecionada.telegramChatId}
+              onMensagemEnviada={() => setAtualizarSinal((n) => n + 1)}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+              <ChatsCircle size={32} className="text-text-secondary" />
+              <p className="text-sm text-text-secondary">Selecione uma conversa para visualizar</p>
+            </div>
+          )
+        ) : (
+          <ProvedoresView />
+        )}
+      </main>
     </div>
   );
 }
 
-function ProviderCard({
-  resumo,
-  state,
-  onModeloChange,
-  onApiKeyChange,
-  onSalvar,
-  onTestar,
-  onAtivar,
+function NavButton({
+  label,
+  ativo,
+  onClick,
+  icon,
 }: {
-  resumo: ProvedorResumo;
-  state: ProviderCardState;
-  onModeloChange: (v: string) => void;
-  onApiKeyChange: (v: string) => void;
-  onSalvar: () => void;
-  onTestar: () => void;
-  onAtivar: () => void;
+  label: string;
+  ativo: boolean;
+  onClick: () => void;
+  icon: ReactNode;
 }) {
   return (
-    <section className="provider-card">
-      <div className="provider-card-head">
-        <div className="provider-title">
-          <h2>{NOME_PROVIDER[resumo.provider] ?? resumo.provider}</h2>
-        </div>
-        {resumo.ativo ? (
-          <span className="badge badge-active">
-            <CheckCircle size={14} weight="fill" /> Ativo
-          </span>
-        ) : resumo.chaveConfigurada ? (
-          <span className="badge">
-            <CircleDashed size={14} /> Configurado
-          </span>
-        ) : (
-          <span className="badge badge-missing">
-            <WarningCircle size={14} weight="fill" /> Sem chave
-          </span>
-        )}
-      </div>
-
-      <div className="field-group">
-        <label htmlFor={`${resumo.provider}-modelo`}>Modelo</label>
-        <input
-          id={`${resumo.provider}-modelo`}
-          type="text"
-          value={state.modelo}
-          onChange={(e) => onModeloChange(e.target.value)}
-        />
-      </div>
-
-      <div className="field-group">
-        <label htmlFor={`${resumo.provider}-key`}>API key</label>
-        <input
-          id={`${resumo.provider}-key`}
-          type="password"
-          autoComplete="off"
-          value={state.apiKey}
-          onChange={(e) => onApiKeyChange(e.target.value)}
-          placeholder={resumo.chaveConfigurada ? "•••••••••••••• (deixe em branco para manter)" : "cole a API key aqui"}
-        />
-        <span className="field-hint">A chave nunca é exibida de volta depois de salva.</span>
-      </div>
-
-      <div className="card-actions">
-        <button className="btn" onClick={onSalvar} disabled={state.salvando}>
-          {state.salvando ? "Salvando…" : "Salvar"}
-        </button>
-        <button className="btn" onClick={onTestar} disabled={state.testando || !resumo.chaveConfigurada}>
-          {state.testando ? "Testando…" : "Testar conexão"}
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={onAtivar}
-          disabled={state.ativando || resumo.ativo || !resumo.chaveConfigurada}
-        >
-          {resumo.ativo ? "Ativo" : state.ativando ? "Ativando…" : "Ativar"}
-        </button>
-      </div>
-
-      {state.status && (
-        <p className={`status-line status-${state.status.tipo}`}>{state.status.texto}</p>
-      )}
-    </section>
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
+        ativo ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-surface-sunken"
+      }`}
+    >
+      {icon}
+    </button>
   );
 }

@@ -11,6 +11,12 @@ export async function listarTodosUsuarios(): Promise<Usuario[]> {
   return rows;
 }
 
+/** Usado pelo admin para resolver o telegram_chat_id a partir do id ao enviar mensagem pela web. */
+export async function obterUsuarioPorId(id: string): Promise<Usuario | null> {
+  const { rows } = await pool.query<Usuario>("select id, telegram_chat_id from usuario where id = $1", [id]);
+  return rows[0] ?? null;
+}
+
 /**
  * Garante que existe um usuario para este chat do Telegram, criando (com uma
  * conta manual padrao) no primeiro contato. Idempotente.

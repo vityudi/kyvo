@@ -51,3 +51,36 @@ export function testarProvedor(provider: LlmProvider): Promise<ApiOk | ApiErro> 
     (err: Error): ApiErro => ({ ok: false, erro: err.message }),
   );
 }
+
+export interface ConversaResumo {
+  usuarioId: string;
+  telegramChatId: number;
+  ultimaMensagem: string;
+  ultimaRole: "user" | "assistant";
+  ultimaEm: string;
+  totalMensagens: number;
+}
+
+export interface MensagemAdmin {
+  id: string;
+  role: "user" | "assistant";
+  conteudo: string;
+  criadoEm: string;
+}
+
+export function listarConversas(): Promise<ConversaResumo[]> {
+  return request("/admin/api/conversas");
+}
+
+export function carregarMensagens(usuarioId: string, antes?: string, limite = 50): Promise<MensagemAdmin[]> {
+  const params = new URLSearchParams({ limite: String(limite) });
+  if (antes) params.set("antes", antes);
+  return request(`/admin/api/conversas/${usuarioId}/mensagens?${params}`);
+}
+
+export function enviarMensagem(usuarioId: string, texto: string): Promise<{ resposta: string }> {
+  return request(`/admin/api/conversas/${usuarioId}/mensagens`, {
+    method: "POST",
+    body: JSON.stringify({ texto }),
+  });
+}

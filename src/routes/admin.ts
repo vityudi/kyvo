@@ -12,8 +12,13 @@ import {
   upsertProvedor,
   type LlmProvider,
 } from "../db/llmConfig.js";
+import { carregarMensagensPaginado, listarConversas } from "../db/mensagem.js";
+import { obterUsuarioPorId } from "../db/usuario.js";
+import { processarMensagem } from "../lib/agent.js";
 import { createAnthropicClient } from "../lib/llm/anthropicClient.js";
 import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
+import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
+import { sendTelegramMessage } from "../lib/telegram.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -103,4 +108,37 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ ok: false, erro: err instanceof Error ? err.message : String(err) });
     }
   });
+
+  app.get("/admin/api/conversas", async () => listarConversas());
+
+  app.get<{ Params: { usuarioId: string }; Querystring: { antes?: string; limite?: string } }>(
+    "/admin/api/conversas/:usuarioId/mensagens",
+    async (request) => {
+      const { usuarioId } = request.params;
+      const { antes, limite } = request.query;
+      return carregarMensagensPaginado(usuarioId, antes, limite ? Number(limite) : undefined);
+    },
+  );
+
+  app.post<{ Params: { usuarioId: string }; Body: { texto: string } }>(
+    "/admin/api/conversas/:usuarioId/mensagens",
+    async (request, reply) => {
+      const usuario = await obterUsuarioPorId(request.params.usuarioId);
+      if (!usuario) {
+        return reply.code(404).send({ ok: false, erro: "usuario nao encontrado" });
+      }
+
+      try {
+        const resposta = await processarMensagem(usuario.id, request.body.texto);
+        await sendTelegramMessage(usuario.telegram_chat_id, resposta);
+        return { ok: true, resposta };
+      } catch (err) {
+        const erro =
+          err instanceof LlmNaoConfiguradoError
+            ? "Ainda não estou configurado — configure um provedor de IA nesta página."
+            : "Deu um erro processando essa mensagem.";
+        return reply.code(502).send({ ok: false, erro });
+      }
+    },
+  );
 }
