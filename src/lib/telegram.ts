@@ -7,7 +7,7 @@ const TELEGRAM_FILE_BASE = "https://api.telegram.org/file";
 
 export class TelegramNaoConfiguradoError extends Error {
   constructor() {
-    super("Nenhum bot do Telegram esta configurado. Configure o token em /admin.");
+    super("Nenhum bot do Telegram esta configurado. Configure o token em /web.");
   }
 }
 
@@ -75,7 +75,7 @@ export async function sendTelegramMessageComRetentativa(chatId: number, text: st
 
 /**
  * Registra a URL publica que o Telegram deve chamar a cada update (ex.: a URL
- * de um tunel ngrok em dev local). Chamado a partir do painel /admin - nao ha
+ * de um tunel ngrok em dev local). Chamado a partir do painel /web - nao ha
  * caminho automatico porque a URL muda a cada sessao de tunel.
  */
 export async function setTelegramWebhook(webhookUrl: string): Promise<void> {
@@ -222,7 +222,7 @@ export async function getTelegramBotStatus(): Promise<TelegramBotStatus> {
       webhookUrl: null,
       webhookSecretConfigurado: false,
       ultimoErroWebhook: null,
-      erro: "Nenhum bot configurado - defina o token em /admin.",
+      erro: "Nenhum bot configurado - defina o token em /web.",
     };
   }
 

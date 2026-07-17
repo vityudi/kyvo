@@ -4,7 +4,7 @@ import { pool } from "./pool.js";
 
 /**
  * Bootstrap opcional para dev local: se GROQ_API_KEY_BOOTSTRAP estiver
- * setada, configura a chave da Groq - evita ter que abrir /admin so pra
+ * setada, configura a chave da Groq - evita ter que abrir /web so pra
  * rodar `docker compose up` localmente. Sem efeito em runtime normal (a
  * transcricao sempre le a chave do banco, nunca deste script).
  */

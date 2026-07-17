@@ -313,7 +313,7 @@ create index idx_alerta_enviado_usuario on alerta_enviado (usuario_id);
 
 -- ---------------------------------------------------------------------------
 -- Configuracao de provedores de LLM (Anthropic/DeepSeek), gerenciada via
--- /admin. A api_key_cifrada fica cifrada (AES-256-GCM, ver src/lib/crypto.ts)
+-- /web. A api_key_cifrada fica cifrada (AES-256-GCM, ver src/lib/crypto.ts)
 -- - a chave mestra de cifragem vem de CONFIG_ENCRYPTION_KEY (env), nunca do
 -- banco.
 -- ---------------------------------------------------------------------------

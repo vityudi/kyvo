@@ -61,7 +61,7 @@ function validate(
 }
 
 /**
- * Painel de administracao - SPA de conversas/config de provedor de LLM,
+ * Painel web - SPA de conversas/config de provedor de LLM,
  * servida na raiz (/) para acesso direto. Protegido por HTTP Basic Auth em
  * todas as rotas, incluindo os arquivos estaticos da SPA - so registrado no
  * processo `app` (server.ts), o worker nao tem superficie HTTP. As rotas
@@ -81,10 +81,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     prefix: "/",
   });
 
-  app.get("/admin/api/providers", async () => listarProvedores());
+  app.get("/web/api/providers", async () => listarProvedores());
 
   app.put<{ Params: { provider: string }; Body: { modelo: string; apiKey?: string } }>(
-    "/admin/api/providers/:provider",
+    "/web/api/providers/:provider",
     async (request, reply) => {
       const { provider } = request.params;
       if (!isValidProvider(provider)) {
@@ -95,7 +95,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post<{ Params: { provider: string } }>("/admin/api/providers/:provider/ativar", async (request, reply) => {
+  app.post<{ Params: { provider: string } }>("/web/api/providers/:provider/ativar", async (request, reply) => {
     const { provider } = request.params;
     if (!isValidProvider(provider)) {
       return reply.code(400).send({ ok: false, erro: "provider invalido" });
@@ -104,7 +104,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  app.post<{ Params: { provider: string } }>("/admin/api/providers/:provider/testar", async (request, reply) => {
+  app.post<{ Params: { provider: string } }>("/web/api/providers/:provider/testar", async (request, reply) => {
     const { provider } = request.params;
     if (!isValidProvider(provider)) {
       return reply.code(400).send({ ok: false, erro: "provider invalido" });
@@ -132,12 +132,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/admin/api/telegram/status", async () => getTelegramBotStatus());
+  app.get("/web/api/telegram/status", async () => getTelegramBotStatus());
 
-  app.get("/admin/api/telegram/config", async () => obterResumoTelegramConfig());
+  app.get("/web/api/telegram/config", async () => obterResumoTelegramConfig());
 
   app.put<{ Body: { botToken?: string; webhookSecret?: string; ownerChatId?: number | null } }>(
-    "/admin/api/telegram/config",
+    "/web/api/telegram/config",
     async (request, reply) => {
       const { botToken, webhookSecret, ownerChatId } = request.body;
       if (!botToken && !webhookSecret && ownerChatId === undefined) {
@@ -160,7 +160,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post<{ Body: { url: string } }>("/admin/api/telegram/webhook", async (request, reply) => {
+  app.post<{ Body: { url: string } }>("/web/api/telegram/webhook", async (request, reply) => {
     const { url } = request.body;
     if (!url) {
       return reply.code(400).send({ ok: false, erro: "informe a URL publica do webhook" });
@@ -175,9 +175,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/admin/api/groq/config", async () => obterResumoGroqConfig());
+  app.get("/web/api/groq/config", async () => obterResumoGroqConfig());
 
-  app.put<{ Body: { apiKey?: string } }>("/admin/api/groq/config", async (request, reply) => {
+  app.put<{ Body: { apiKey?: string } }>("/web/api/groq/config", async (request, reply) => {
     const { apiKey } = request.body;
     if (!apiKey) {
       return reply.code(400).send({ ok: false, erro: "informe a API key da Groq" });
@@ -186,17 +186,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  app.get("/admin/api/integracoes", async () => ({
+  app.get("/web/api/integracoes", async () => ({
     pluggyConfigurado: Boolean(env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET),
   }));
 
-  app.get("/admin/api/conversas", async () => listarConversas());
+  app.get("/web/api/conversas", async () => listarConversas());
 
-  app.post<{ Params: { usuarioId: string } }>("/admin/api/usuarios/:usuarioId/conversas", async (request) =>
+  app.post<{ Params: { usuarioId: string } }>("/web/api/usuarios/:usuarioId/conversas", async (request) =>
     iniciarNovaConversa(request.params.usuarioId),
   );
 
-  app.delete<{ Params: { conversaId: string } }>("/admin/api/conversas/:conversaId", async (request, reply) => {
+  app.delete<{ Params: { conversaId: string } }>("/web/api/conversas/:conversaId", async (request, reply) => {
     const apagada = await deletarConversa(request.params.conversaId);
     if (!apagada) {
       return reply.code(404).send({ ok: false, erro: "conversa nao encontrada" });
@@ -205,7 +205,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get<{ Params: { conversaId: string }; Querystring: { antes?: string; limite?: string } }>(
-    "/admin/api/conversas/:conversaId/mensagens",
+    "/web/api/conversas/:conversaId/mensagens",
     async (request) => {
       const { conversaId } = request.params;
       const { antes, limite } = request.query;
@@ -213,7 +213,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post<{ Params: { conversaId: string } }>("/admin/api/conversas/:conversaId/mensagens", async (request, reply) => {
+  app.post<{ Params: { conversaId: string } }>("/web/api/conversas/:conversaId/mensagens", async (request, reply) => {
     const conversa = await obterConversaComUsuario(request.params.conversaId);
     if (!conversa) {
       return reply.code(404).send({ ok: false, erro: "conversa nao encontrada" });
@@ -294,7 +294,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, resposta };
   });
 
-  app.get<{ Params: { anexoId: string } }>("/admin/api/anexos/:anexoId", async (request, reply) => {
+  app.get<{ Params: { anexoId: string } }>("/web/api/anexos/:anexoId", async (request, reply) => {
     const anexo = await obterAnexoParaDownload(request.params.anexoId);
     if (!anexo) {
       return reply.code(404).send({ ok: false, erro: "anexo nao encontrado" });

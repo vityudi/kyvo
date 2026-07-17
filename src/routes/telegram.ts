@@ -179,7 +179,7 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
       logger.error({ err, usuarioId: usuario.id }, "falha ao processar mensagem com o agente");
       resposta =
         err instanceof LlmNaoConfiguradoError
-          ? "Ainda não estou configurado — peça para quem administra o bot configurar um provedor de IA em /admin."
+          ? "Ainda não estou configurado — peça para quem administra o bot configurar um provedor de IA em /web."
           : "Deu um erro aqui do meu lado processando sua mensagem. Pode tentar de novo?";
     }
 

@@ -15,7 +15,7 @@ Mande "gastei 47 reais no ifood" ou "separa 500 pra viagem em dezembro" pelo Tel
 </p>
 
 <p align="center">
-  <img src="docs/assets/admin-ui-chat.png" alt="Painel admin do Kyvo — chat, provedor de LLM ativo e status do Telegram" width="820">
+  <img src="docs/assets/admin-ui-chat.png" alt="Painel web do Kyvo — chat, provedor de LLM ativo e status do Telegram" width="820">
 </p>
 
 ---
@@ -25,10 +25,10 @@ Mande "gastei 47 reais no ifood" ou "separa 500 pra viagem em dezembro" pelo Tel
 - 💬 **100% linguagem natural** — registrar gasto, consultar saldo, criar meta, pedir lembrete: tudo em texto corrido.
 - 🧠 **Memória de verdade** — perfil pessoal, contexto de vida, preferências e insights persistem entre conversas e moldam as respostas seguintes.
 - 🔒 **IA nunca escreve direto no banco** — toda ação passa por *tool calls* validadas; saldo e histórico sempre vêm de query SQL, nunca de "memória aproximada" do modelo.
-- 🔁 **Multi-LLM, trocável em runtime** — Claude (Anthropic) e DeepSeek, alternáveis pelo painel `/admin`, com API keys cifradas (AES-256-GCM) no Postgres.
+- 🔁 **Multi-LLM, trocável em runtime** — Claude (Anthropic) e DeepSeek, alternáveis pelo painel web, com API keys cifradas (AES-256-GCM) no Postgres.
 - 🎙️ **Multimodal** — texto, imagem, áudio (transcrito via Groq/Whisper) e documentos como anexo, direto pelo Telegram.
 - ⏰ **Proativo** — worker separado dispara alertas de orçamento estourado, meta com prazo próximo e anomalia de gasto por categoria.
-- 🖥️ **Painel admin web** — chat com histórico, troca de provedor de IA, integrações e configurações, fora do Telegram.
+- 🖥️ **Painel web** — chat com histórico, troca de provedor de IA, integrações e configurações, fora do Telegram.
 - 🏠 **Self-hostable** — um `docker-compose.yml`, zero segredo no código, roda em qualquer VPS/Fly.io/Railway.
 
 ---
@@ -38,12 +38,24 @@ Mande "gastei 47 reais no ifood" ou "separa 500 pra viagem em dezembro" pelo Tel
 ```
 Usuário ⇄ Telegram (webhook) ⇄ app (Fastify) ──tool use──▶ Claude / DeepSeek
                     ▲                │
-        painel /admin (React)        ▼
+        painel web (React)           ▼
                     │          Postgres (full-text search nativo)
                     │                ▲
                     └──────────►  worker (cron) ── alertas proativos,
                                                     consolidação de memória
 ```
+
+## Telegram
+
+O Telegram é o canal principal do Kyvo — é por lá que o dia a dia acontece, o painel web é só apoio para configuração e histórico.
+
+- **Tudo em linguagem natural.** Sem menus ou sintaxe fixa: "gastei 47 no ifood", "quanto sobrou esse mês", "me lembra de pagar o aluguel dia 5" — o agente interpreta a intenção e chama as *tool calls* certas.
+- **Único comando fixo é `/nova`** — começa uma conversa nova sem perder orçamentos, metas ou perfil já registrados.
+- **Multimodal nativo** — manda foto de nota fiscal, áudio (transcrito via Groq/Whisper) ou documento (PDF) como anexo, e o Kyvo extrai e registra o que for relevante.
+- **Alertas proativos** — o `worker` roda em processo separado e o bot avisa sozinho quando um orçamento estoura, uma meta com prazo se aproxima ou aparece um gasto fora do padrão numa categoria.
+- **Setup** — token via [@BotFather](https://t.me/BotFather), cadastrado no painel web; o webhook precisa de HTTPS público (reverse proxy com TLS em produção, [ngrok](https://ngrok.com/) para testar local).
+
+---
 
 ## Stack
 
@@ -51,7 +63,7 @@ Usuário ⇄ Telegram (webhook) ⇄ app (Fastify) ──tool use──▶ Claude
 |---|---|
 | Linguagem/runtime | TypeScript + Node.js 20 |
 | Servidor HTTP | Fastify |
-| Painel admin | React + Vite + Tailwind CSS |
+| Painel web | React + Vite + Tailwind CSS |
 | Banco de dados | PostgreSQL (full-text search nativo, sem embeddings) |
 | IA (conversação) | [Claude API](https://www.anthropic.com/api) e DeepSeek, via tool use — trocáveis em runtime |
 | Transcrição de áudio | Groq (Whisper) |
@@ -72,14 +84,14 @@ Só duas variáveis são obrigatórias:
 | Variável | O que é |
 |---|---|
 | `CONFIG_ENCRYPTION_KEY` | Gere com `openssl rand -hex 32` — cifra as API keys guardadas no banco |
-| `ADMIN_PASSWORD` | Senha do painel `/admin` (usuário fixo `admin`, HTTP Basic Auth) |
+| `ADMIN_PASSWORD` | Senha do painel web (usuário fixo `admin`, HTTP Basic Auth) |
 
 ```bash
 docker compose up --build -d
 curl http://localhost:3000/health   # {"status":"ok"}
 ```
 
-Depois, acesse `http://localhost:3000/admin` e cadastre por lá: provedor de LLM (Anthropic/DeepSeek), token do Telegram ([@BotFather](https://t.me/BotFather)) e, opcionalmente, a Groq para transcrição de áudio. O Telegram precisa alcançar o `app` via HTTPS público (reverse proxy com TLS em produção, [ngrok](https://ngrok.com/) para testar local).
+Depois, acesse `http://localhost:3000/` e cadastre por lá: provedor de LLM (Anthropic/DeepSeek), token do Telegram ([@BotFather](https://t.me/BotFather)) e, opcionalmente, a Groq para transcrição de áudio. O Telegram precisa alcançar o `app` via HTTPS público (reverse proxy com TLS em produção, [ngrok](https://ngrok.com/) para testar local).
 
 ```bash
 docker compose logs -f app       # logs do servidor
@@ -96,7 +108,7 @@ npm run dev              # servidor com hot-reload
 npm run dev:worker       # em outro terminal
 ```
 
-Painel admin em modo dev: `cd admin-ui && npm install && npm run dev`.
+Painel web em modo dev: `cd admin-ui && npm install && npm run dev`.
 
 ---
 
@@ -110,7 +122,7 @@ src/
     agent.ts, tools.ts          - loop do agente (tool use) e as tools disponíveis
     llm/                        - clientes Anthropic e DeepSeek por trás de uma interface comum
     telegram.ts, storage.ts     - Bot API e anexos
-  routes/                       - webhook do Telegram + API do painel /admin
+  routes/                       - webhook do Telegram + API do painel /web
   server.ts / worker.ts         - processos "app" (HTTP) e "worker" (cron/alertas)
 
 admin-ui/

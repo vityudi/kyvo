@@ -4,7 +4,7 @@ import { upsertTelegramConfig } from "./telegramConfig.js";
 
 /**
  * Bootstrap opcional para dev local: se TELEGRAM_BOT_TOKEN_BOOTSTRAP estiver
- * setada, configura o bot do Telegram - evita ter que abrir /admin so pra
+ * setada, configura o bot do Telegram - evita ter que abrir /web so pra
  * rodar `docker compose up` localmente. Sem efeito em runtime normal (o bot
  * sempre le a config do banco, nunca deste script).
  */

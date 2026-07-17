@@ -101,7 +101,7 @@ export async function listarAnexosPorMensagens(mensagemIds: string[]): Promise<M
   return mapa;
 }
 
-/** Usado pela rota de download (`/admin/api/anexos/:id`) para resolver o arquivo em disco. */
+/** Usado pela rota de download (`/web/api/anexos/:id`) para resolver o arquivo em disco. */
 export async function obterAnexoParaDownload(
   anexoId: string,
 ): Promise<{ caminhoArmazenamento: string; mimeType: string; nomeArquivo: string | null } | null> {

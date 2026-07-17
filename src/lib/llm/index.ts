@@ -5,7 +5,7 @@ import type { LlmClient } from "./types.js";
 
 export class LlmNaoConfiguradoError extends Error {
   constructor() {
-    super("Nenhum provedor de LLM esta ativo. Configure em /admin.");
+    super("Nenhum provedor de LLM esta ativo. Configure em /web.");
   }
 }
 

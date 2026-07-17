@@ -16,7 +16,7 @@ export interface TelegramConfigResumo {
 
 /**
  * Config do bot em uso agora. Sem cache, mesmo raciocinio de getActiveLlmConfig
- * (lookup indexado unico, trafego baixo) - troca no painel /admin vale ja na
+ * (lookup indexado unico, trafego baixo) - troca no painel /web vale ja na
  * proxima request/mensagem.
  */
 export async function getTelegramConfig(): Promise<TelegramConfig | null> {

@@ -14,7 +14,7 @@ const GROQ_WHISPER_MODEL = "whisper-large-v3-turbo";
  * necessario antes de dar o conteudo falado pro agente.
  *
  * Retorna null (nunca lanca) quando a chave da Groq nao esta configurada em
- * /admin, ou se a chamada falhar - a mensagem de audio ainda fica salva como
+ * /web, ou se a chamada falhar - a mensagem de audio ainda fica salva como
  * anexo, so sem o texto transcrito chegando ao agente.
  */
 export async function transcreverAudio(buffer: Buffer, mimeType: string): Promise<string | null> {

@@ -8,7 +8,7 @@ export interface GroqConfigResumo {
 
 /**
  * Chave em uso agora pela transcricao de audio. Sem cache, mesmo raciocinio
- * de getTelegramConfig/getActiveLlmConfig - troca no painel /admin vale ja
+ * de getTelegramConfig/getActiveLlmConfig - troca no painel /web vale ja
  * no proximo audio recebido.
  */
 export async function getGroqApiKey(): Promise<string | null> {

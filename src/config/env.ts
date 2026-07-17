@@ -23,15 +23,15 @@ const envSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{64}$/i, "CONFIG_ENCRYPTION_KEY deve ter 64 caracteres hex (32 bytes)"),
 
-  // Senha do painel /admin (usuario fixo "admin", HTTP Basic Auth). Sem
+  // Senha do painel /web (usuario fixo "admin", HTTP Basic Auth). Sem
   // exigencia de tamanho minimo por escolha do time - troque por algo mais
   // forte antes de expor o painel fora de localhost.
   ADMIN_PASSWORD: z.string().min(1, "ADMIN_PASSWORD e obrigatoria - veja .env.example"),
 
   // Bootstrap opcional (dev local): seeda o bot do Telegram no primeiro boot
-  // via `npm run seed:telegram-config` - evita ter que abrir /admin so pra
+  // via `npm run seed:telegram-config` - evita ter que abrir /web so pra
   // rodar localmente. Sem efeito em runtime normal (o bot sempre le do banco,
-  // configuravel via painel /admin).
+  // configuravel via painel /web).
   TELEGRAM_BOT_TOKEN_BOOTSTRAP: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET_BOOTSTRAP: z.string().optional(),
 

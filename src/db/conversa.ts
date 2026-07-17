@@ -12,7 +12,7 @@ const LIMITE_INATIVIDADE_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Arquiva a conversa ativa do usuario (se existir) e cria uma nova - usado
- * tanto pelo comando /nova/reset no Telegram/admin quanto pela expiracao
+ * tanto pelo comando /nova/reset no Telegram/web quanto pela expiracao
  * automatica por inatividade em obterOuCriarConversaAtiva. So reseta o
  * historico curto de chat (mensagem.conversa_id); o core memory do usuario
  * (orcamentos/metas/perfil/memoria_insight) continua intacto, pois fica por

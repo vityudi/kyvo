@@ -4,7 +4,7 @@ import { pool } from "./pool.js";
 
 /**
  * Bootstrap opcional para dev local: se ANTHROPIC_API_KEY_BOOTSTRAP estiver
- * setada, configura e ativa o provedor Anthropic - evita ter que abrir /admin
+ * setada, configura e ativa o provedor Anthropic - evita ter que abrir /web
  * so pra rodar `docker compose up` localmente. Sem efeito em runtime normal
  * (o agente sempre le a config do banco, nunca deste script).
  */

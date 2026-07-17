@@ -36,22 +36,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function listarProvedores(): Promise<ProvedorResumo[]> {
-  return request("/admin/api/providers");
+  return request("/web/api/providers");
 }
 
 export function salvarProvedor(provider: LlmProvider, modelo: string, apiKey?: string): Promise<ApiOk> {
-  return request(`/admin/api/providers/${provider}`, {
+  return request(`/web/api/providers/${provider}`, {
     method: "PUT",
     body: JSON.stringify({ modelo, apiKey: apiKey || undefined }),
   });
 }
 
 export function ativarProvedor(provider: LlmProvider): Promise<ApiOk> {
-  return request(`/admin/api/providers/${provider}/ativar`, { method: "POST" });
+  return request(`/web/api/providers/${provider}/ativar`, { method: "POST" });
 }
 
 export function testarProvedor(provider: LlmProvider): Promise<ApiOk | ApiErro> {
-  return request<ApiOk | ApiErro>(`/admin/api/providers/${provider}/testar`, { method: "POST" }).catch(
+  return request<ApiOk | ApiErro>(`/web/api/providers/${provider}/testar`, { method: "POST" }).catch(
     (err: Error): ApiErro => ({ ok: false, erro: err.message }),
   );
 }
@@ -68,7 +68,7 @@ export interface TelegramStatus {
 }
 
 export function obterStatusTelegram(): Promise<TelegramStatus> {
-  return request("/admin/api/telegram/status");
+  return request("/web/api/telegram/status");
 }
 
 export interface TelegramConfigResumo {
@@ -79,7 +79,7 @@ export interface TelegramConfigResumo {
 }
 
 export function obterConfigTelegram(): Promise<TelegramConfigResumo> {
-  return request("/admin/api/telegram/config");
+  return request("/web/api/telegram/config");
 }
 
 export function salvarConfigTelegram(
@@ -87,14 +87,14 @@ export function salvarConfigTelegram(
   webhookSecret?: string,
   ownerChatId?: number | null,
 ): Promise<ApiOk> {
-  return request("/admin/api/telegram/config", {
+  return request("/web/api/telegram/config", {
     method: "PUT",
     body: JSON.stringify({ botToken: botToken || undefined, webhookSecret: webhookSecret || undefined, ownerChatId }),
   });
 }
 
 export function registrarWebhookTelegram(url: string): Promise<ApiOk | ApiErro> {
-  return request<ApiOk | ApiErro>("/admin/api/telegram/webhook", {
+  return request<ApiOk | ApiErro>("/web/api/telegram/webhook", {
     method: "POST",
     body: JSON.stringify({ url }),
   }).catch((err: Error): ApiErro => ({ ok: false, erro: err.message }));
@@ -105,7 +105,7 @@ export interface IntegracoesStatus {
 }
 
 export function obterIntegracoes(): Promise<IntegracoesStatus> {
-  return request("/admin/api/integracoes");
+  return request("/web/api/integracoes");
 }
 
 export interface GroqConfigResumo {
@@ -114,11 +114,11 @@ export interface GroqConfigResumo {
 }
 
 export function obterConfigGroq(): Promise<GroqConfigResumo> {
-  return request("/admin/api/groq/config");
+  return request("/web/api/groq/config");
 }
 
 export function salvarConfigGroq(apiKey: string): Promise<ApiOk> {
-  return request("/admin/api/groq/config", {
+  return request("/web/api/groq/config", {
     method: "PUT",
     body: JSON.stringify({ apiKey }),
   });
@@ -163,17 +163,17 @@ export interface Conversa {
 }
 
 export function listarConversas(): Promise<ConversaResumo[]> {
-  return request("/admin/api/conversas");
+  return request("/web/api/conversas");
 }
 
 export function criarConversa(usuarioId: string): Promise<Conversa> {
-  return request(`/admin/api/usuarios/${usuarioId}/conversas`, { method: "POST" });
+  return request(`/web/api/usuarios/${usuarioId}/conversas`, { method: "POST" });
 }
 
 export function carregarMensagens(conversaId: string, antes?: string, limite = 50): Promise<MensagemAdmin[]> {
   const params = new URLSearchParams({ limite: String(limite) });
   if (antes) params.set("antes", antes);
-  return request(`/admin/api/conversas/${conversaId}/mensagens?${params}`);
+  return request(`/web/api/conversas/${conversaId}/mensagens?${params}`);
 }
 
 export function enviarMensagem(conversaId: string, texto: string, arquivo?: File): Promise<{ resposta: string }> {
@@ -181,19 +181,19 @@ export function enviarMensagem(conversaId: string, texto: string, arquivo?: File
     const formData = new FormData();
     formData.set("texto", texto);
     formData.set("arquivo", arquivo);
-    return request(`/admin/api/conversas/${conversaId}/mensagens`, { method: "POST", body: formData });
+    return request(`/web/api/conversas/${conversaId}/mensagens`, { method: "POST", body: formData });
   }
 
-  return request(`/admin/api/conversas/${conversaId}/mensagens`, {
+  return request(`/web/api/conversas/${conversaId}/mensagens`, {
     method: "POST",
     body: JSON.stringify({ texto }),
   });
 }
 
 export function deletarConversa(conversaId: string): Promise<ApiOk> {
-  return request(`/admin/api/conversas/${conversaId}`, { method: "DELETE" });
+  return request(`/web/api/conversas/${conversaId}`, { method: "DELETE" });
 }
 
 export function urlAnexo(anexoId: string): string {
-  return `/admin/api/anexos/${anexoId}`;
+  return `/web/api/anexos/${anexoId}`;
 }

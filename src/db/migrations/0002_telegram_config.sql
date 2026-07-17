@@ -1,4 +1,4 @@
--- Config do bot do Telegram, editavel via painel /admin (mesmo padrao de
+-- Config do bot do Telegram, editavel via painel /web (mesmo padrao de
 -- llm_provedor: segredo cifrado no banco em vez de variavel de ambiente).
 -- Singleton (id fixo) - so existe um bot por instancia do Kyvo.
 
