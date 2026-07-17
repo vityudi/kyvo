@@ -77,7 +77,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   await app.register(fastifyStatic, {
-    root: join(__dirname, "../../admin-ui/dist"),
+    root: join(__dirname, "../../web-ui/dist"),
     prefix: "/",
   });
 

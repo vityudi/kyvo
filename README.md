@@ -15,7 +15,7 @@ Mande "gastei 47 reais no ifood" ou "separa 500 pra viagem em dezembro" pelo Tel
 </p>
 
 <p align="center">
-  <img src="docs/assets/admin-ui-chat.png" alt="Painel web do Kyvo — chat, provedor de LLM ativo e status do Telegram" width="820">
+  <img src="docs/assets/web-ui-chat.png" alt="Painel web do Kyvo — chat, provedor de LLM ativo e status do Telegram" width="820">
 </p>
 
 ---
@@ -108,7 +108,7 @@ npm run dev              # servidor com hot-reload
 npm run dev:worker       # em outro terminal
 ```
 
-Painel web em modo dev: `cd admin-ui && npm install && npm run dev`.
+Painel web em modo dev: `cd web-ui && npm install && npm run dev`.
 
 ---
 
@@ -125,7 +125,7 @@ src/
   routes/                       - webhook do Telegram + API do painel /web
   server.ts / worker.ts         - processos "app" (HTTP) e "worker" (cron/alertas)
 
-admin-ui/
+web-ui/
   src/components/               - chat, provedores de LLM, integrações, configurações
 ```
 
