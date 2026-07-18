@@ -3,42 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "description": "Assistente financeiro pessoal com IA e memoria, operado por linguagem natural via chat",
-  "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:worker": "tsx watch src/worker.ts",
-    "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
-    "start": "node dist/server.js",
-    "start:worker": "node dist/worker.js",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed:conhecimento": "tsx src/db/seedBaseConhecimento.ts",
-    "seed:llm-config": "tsx src/db/seedLlmConfig.ts",
-    "seed:telegram-config": "tsx src/db/seedTelegramConfig.ts",
-    "seed:groq-config": "tsx src/db/seedGroqConfig.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
-    "@fastify/basic-auth": "^6.2.0",
-    "@fastify/multipart": "^9.0.3",
-    "@fastify/static": "^10.1.0",
-    "dotenv": "^16.4.5",
-    "fastify": "^5.1.0",
-    "node-cron": "^4.2.1",
-    "openai": "^4.104.0",
-    "pg": "^8.13.1",
-    "pino": "^9.5.0",
-    "pino-pretty": "^11.3.0",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@types/node": "^22.9.0",
-    "@types/node-cron": "^3.0.11",
-    "@types/pg": "^8.11.10",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "dev": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "start": "npm run start -w apps/api",
+    "typecheck": "npm run typecheck -w apps/api",
+    "migrate": "npm run migrate -w apps/api",
+    "seed:conhecimento": "npm run seed:conhecimento -w apps/api",
+    "seed:llm-config": "npm run seed:llm-config -w apps/api",
+    "seed:telegram-config": "npm run seed:telegram-config -w apps/api",
+    "seed:groq-config": "npm run seed:groq-config -w apps/api"
   }
 }

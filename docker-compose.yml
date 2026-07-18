@@ -1,11 +1,16 @@
 # Stack completa do Kyvo para rodar em qualquer infra propria via Docker.
-# Uso: copie .env.example para .env, preencha os valores, e rode:
-#   docker compose up --build -d
+# Uso: copie apps/api/.env.example para apps/api/.env, preencha os valores, e rode:
+#   docker compose --env-file apps/api/.env up --build -d
+# (--env-file e necessario porque o .env vive dentro de apps/api, nao na raiz -
+# ele alimenta tanto a substituicao de variaveis deste arquivo quanto o
+# container "app" via env_file abaixo.)
 #
 # Servicos:
 #   postgres - banco de dados (camada de memoria/RAG usa full-text search nativo, sem extensoes extras)
-#   app      - servidor HTTP que recebe o webhook do Telegram e conversa com o Claude
-#   worker   - processo separado para alertas proativos e consolidacao de memoria (cron)
+#   app      - servidor HTTP que recebe o webhook do Telegram, conversa com o Claude
+#              e roda os agendamentos (alertas proativos, lembretes, consolidacao de
+#              memoria) no mesmo processo via node-cron (ver src/scheduler.ts) -
+#              consolidado num unico servico para caber em infra pequena/free tier.
 
 services:
   postgres:
@@ -32,7 +37,7 @@ services:
     command: ["node", "dist/server.js"]
     restart: unless-stopped
     env_file:
-      - .env
+      - apps/api/.env
     environment:
       POSTGRES_HOST: postgres
     ports:
@@ -48,18 +53,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  worker:
-    build: .
-    command: ["node", "dist/worker.js"]
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      POSTGRES_HOST: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
 
 volumes:
   kyvo_postgres_data:

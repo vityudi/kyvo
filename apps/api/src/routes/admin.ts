@@ -63,8 +63,7 @@ function validate(
 /**
  * Painel web - SPA de conversas/config de provedor de LLM,
  * servida na raiz (/) para acesso direto. Protegido por HTTP Basic Auth em
- * todas as rotas, incluindo os arquivos estaticos da SPA - so registrado no
- * processo `app` (server.ts), o worker nao tem superficie HTTP. As rotas
+ * todas as rotas, incluindo os arquivos estaticos da SPA. As rotas
  * `/health` e `/webhook/telegram`, registradas fora deste plugin, continuam
  * sem autenticacao (hook `onRequest` e escopado a este plugin).
  */
@@ -77,7 +76,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   await app.register(fastifyStatic, {
-    root: join(__dirname, "../../web-ui/dist"),
+    root: join(__dirname, "../../web/dist"),
     prefix: "/",
   });
 

@@ -8,8 +8,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, "migrations");
 
 // Numero arbitrario fixo, so precisa ser o mesmo em todo processo que roda
-// migrations (server.ts e worker.ts podem subir ao mesmo tempo no docker
-// compose - o lock garante que so um deles aplique migrations por vez).
+// migrations - o lock garante que, se mais de uma instancia subir ao mesmo
+// tempo (ex.: deploy com rolling restart), so uma aplique migrations por vez.
 const MIGRATION_LOCK_ID = 726_611_004;
 
 /**
@@ -61,7 +61,7 @@ export async function runMigrations(targetPool: Pool = pool): Promise<void> {
 }
 
 // Permite rodar `npm run migrate` isoladamente, alem de ser chamado no boot
-// de server.ts/worker.ts.
+// de server.ts.
 if (import.meta.url === `file://${process.argv[1]}`) {
   runMigrations()
     .then(() => {

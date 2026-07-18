@@ -27,7 +27,7 @@ Mande "gastei 47 reais no ifood" ou "separa 500 pra viagem em dezembro" pelo Tel
 - 🔒 **IA nunca escreve direto no banco** — toda ação passa por *tool calls* validadas; saldo e histórico sempre vêm de query SQL, nunca de "memória aproximada" do modelo.
 - 🔁 **Multi-LLM, trocável em runtime** — Claude (Anthropic) e DeepSeek, alternáveis pelo painel web, com API keys cifradas (AES-256-GCM) no Postgres.
 - 🎙️ **Multimodal** — texto, imagem, áudio (transcrito via Groq/Whisper) e documentos como anexo, direto pelo Telegram.
-- ⏰ **Proativo** — worker separado dispara alertas de orçamento estourado, meta com prazo próximo e anomalia de gasto por categoria.
+- ⏰ **Proativo** — agendamentos (cron) no próprio processo disparam alertas de orçamento estourado, meta com prazo próximo e anomalia de gasto por categoria.
 - 🖥️ **Painel web** — chat com histórico, troca de provedor de IA, integrações e configurações, fora do Telegram.
 - 🏠 **Self-hostable** — um `docker-compose.yml`, zero segredo no código, roda em qualquer VPS/Fly.io/Railway.
 
@@ -41,8 +41,8 @@ Usuário ⇄ Telegram (webhook) ⇄ app (Fastify) ──tool use──▶ Claude
         painel web (React)           ▼
                     │          Postgres (full-text search nativo)
                     │                ▲
-                    └──────────►  worker (cron) ── alertas proativos,
-                                                    consolidação de memória
+                    └──────────►  scheduler (node-cron, mesmo processo)
+                                  ── alertas proativos, consolidação de memória
 ```
 
 ## Telegram
@@ -52,7 +52,7 @@ O Telegram é o canal principal do Kyvo — é por lá que o dia a dia acontece,
 - **Tudo em linguagem natural.** Sem menus ou sintaxe fixa: "gastei 47 no ifood", "quanto sobrou esse mês", "me lembra de pagar o aluguel dia 5" — o agente interpreta a intenção e chama as *tool calls* certas.
 - **Único comando fixo é `/nova`** — começa uma conversa nova sem perder orçamentos, metas ou perfil já registrados.
 - **Multimodal nativo** — manda foto de nota fiscal, áudio (transcrito via Groq/Whisper) ou documento (PDF) como anexo, e o Kyvo extrai e registra o que for relevante.
-- **Alertas proativos** — o `worker` roda em processo separado e o bot avisa sozinho quando um orçamento estoura, uma meta com prazo se aproxima ou aparece um gasto fora do padrão numa categoria.
+- **Alertas proativos** — o `scheduler` roda dentro do mesmo processo do servidor e o bot avisa sozinho quando um orçamento estoura, uma meta com prazo se aproxima ou aparece um gasto fora do padrão numa categoria.
 - **Setup** — token via [@BotFather](https://t.me/BotFather), cadastrado no painel web; o webhook precisa de HTTPS público (reverse proxy com TLS em produção, [ngrok](https://ngrok.com/) para testar local).
 
 ---
@@ -76,7 +76,7 @@ O Telegram é o canal principal do Kyvo — é por lá que o dia a dia acontece,
 ## Rodando localmente com Docker Compose
 
 ```bash
-cp .env.example .env
+cp apps/api/.env.example apps/api/.env
 ```
 
 Só duas variáveis são obrigatórias:
@@ -87,7 +87,7 @@ Só duas variáveis são obrigatórias:
 | `ADMIN_PASSWORD` | Senha do painel web (usuário fixo `admin`, HTTP Basic Auth) |
 
 ```bash
-docker compose up --build -d
+docker compose --env-file apps/api/.env up --build -d
 curl http://localhost:3000/health   # {"status":"ok"}
 ```
 
@@ -101,35 +101,38 @@ docker compose down              # parar tudo (mantém os dados do Postgres)
 ## Desenvolvimento sem Docker
 
 ```bash
-npm install
-cp .env.example .env    # ajuste POSTGRES_HOST=localhost
+npm install                        # instala api + web (npm workspaces)
+cp apps/api/.env.example apps/api/.env    # ajuste POSTGRES_HOST=localhost
 npm run migrate
-npm run dev              # servidor com hot-reload
-npm run dev:worker       # em outro terminal
+npm run dev              # servidor com hot-reload (inclui os agendamentos)
 ```
 
-Painel web em modo dev: `cd web-ui && npm install && npm run dev`.
+Painel web em modo dev: `npm run dev:web`.
 
 ---
 
 ## Estrutura do projeto
 
 ```
-src/
-  db/                          - acesso a dados: transações, orçamentos, metas, lembretes,
-                                  perfil/memória (RAG), migrations SQL versionadas
-  lib/
-    agent.ts, tools.ts          - loop do agente (tool use) e as tools disponíveis
-    llm/                        - clientes Anthropic e DeepSeek por trás de uma interface comum
-    telegram.ts, storage.ts     - Bot API e anexos
-  routes/                       - webhook do Telegram + API do painel /web
-  server.ts / worker.ts         - processos "app" (HTTP) e "worker" (cron/alertas)
-
-web-ui/
-  src/components/               - chat, provedores de LLM, integrações, configurações
+apps/
+  api/
+    src/
+      db/                        - acesso a dados: transações, orçamentos, metas, lembretes,
+                                    perfil/memória (RAG), migrations SQL versionadas
+      lib/
+        agent.ts, tools.ts        - loop do agente (tool use) e as tools disponíveis
+        llm/                      - clientes Anthropic e DeepSeek por trás de uma interface comum
+        telegram.ts, storage.ts   - Bot API e anexos
+      routes/                     - webhook do Telegram + API do painel /web
+      server.ts                   - processo "app" (HTTP), sobe o scheduler no boot
+      scheduler.ts                - agendamentos (cron/alertas), roda no mesmo processo
+  web/
+    src/components/               - chat, provedores de LLM, integrações, configurações
 ```
 
-Schema versionado em `src/db/migrations/*.sql`, aplicado automaticamente no boot.
+Dois pacotes (`apps/api`, `apps/web`) sob um `package.json` raiz com npm workspaces — em runtime é um serviço único: o `apps/api` compilado serve a API, o webhook do Telegram e os arquivos estáticos de `apps/web` compilado (ver `src/routes/admin.ts`).
+
+Schema versionado em `apps/api/src/db/migrations/*.sql`, aplicado automaticamente no boot.
 
 ---
 

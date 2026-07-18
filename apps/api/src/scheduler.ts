@@ -2,9 +2,7 @@ import cron from "node-cron";
 import { metasComPrazoProximo, orcamentosEstourados, tentarRegistrarAlerta } from "./db/alertas.js";
 import { detectarAnomalias } from "./db/anomalias.js";
 import { dispararLembretesVencidos } from "./db/lembrete.js";
-import { runMigrations } from "./db/migrate.js";
 import { existeInsightNoPeriodo, registrarInsight } from "./db/memoriaInsight.js";
-import { pool } from "./db/pool.js";
 import { resumoPeriodo } from "./db/transacao.js";
 import { listarTodosUsuarios } from "./db/usuario.js";
 import { gerarExplicacaoAnomalia, gerarResumoMensal } from "./lib/insightGenerator.js";
@@ -12,10 +10,10 @@ import { logger } from "./lib/logger.js";
 import { sendTelegramMessage } from "./lib/telegram.js";
 
 /**
- * Processo separado do servidor web (ver docs/FOUNDATION.md, secao 3): roda
- * as tarefas que nao sao reacao direta a uma mensagem do usuario - alertas
- * proativos de orcamento/meta, e a consolidacao periodica de memoria/insights
- * (docs/RAG_MEMORY_ARCHITECTURE.md, secao 5).
+ * Tarefas agendadas (cron) que nao sao reacao direta a uma mensagem do
+ * usuario - alertas proativos de orcamento/meta, lembretes e a consolidacao
+ * periodica de memoria/insights (docs/RAG_MEMORY_ARCHITECTURE.md, secao 5).
+ * Roda dentro do mesmo processo do servidor HTTP (ver src/server.ts).
  */
 
 function primeiroDiaMes(data: Date): string {
@@ -55,7 +53,7 @@ async function verificarAlertas(): Promise<void> {
     }
   }
 
-  logger.info({ usuarios: usuarios.length }, "[worker] verificacao de alertas concluida");
+  logger.info({ usuarios: usuarios.length }, "[scheduler] verificacao de alertas concluida");
 }
 
 /** Dispara lembretes vencidos via Telegram - best-effort, sem retry (mesmo espirito de verificarAlertas). */
@@ -66,12 +64,12 @@ async function dispararLembretes(): Promise<void> {
     try {
       await sendTelegramMessage(lembrete.telegram_chat_id, `Lembrete: ${lembrete.descricao}`);
     } catch (err) {
-      logger.error({ err, lembreteId: lembrete.id }, "[worker] falha ao enviar lembrete");
+      logger.error({ err, lembreteId: lembrete.id }, "[scheduler] falha ao enviar lembrete");
     }
   }
 
   if (lembretes.length) {
-    logger.info({ enviados: lembretes.length }, "[worker] lembretes disparados");
+    logger.info({ enviados: lembretes.length }, "[scheduler] lembretes disparados");
   }
 }
 
@@ -136,36 +134,22 @@ async function consolidarMemoria(): Promise<void> {
     }
   }
 
-  logger.info({ usuarios: usuarios.length }, "[worker] consolidacao de memoria concluida");
+  logger.info({ usuarios: usuarios.length }, "[scheduler] consolidacao de memoria concluida");
 }
 
-async function main(): Promise<void> {
-  await runMigrations();
-
+/** Registra os cron jobs no processo atual. Chamado uma vez a partir de src/server.ts. */
+export function iniciarScheduler(): void {
   cron.schedule("0 * * * *", () => {
-    verificarAlertas().catch((err) => logger.error(err, "[worker] falha na verificacao de alertas"));
+    verificarAlertas().catch((err) => logger.error(err, "[scheduler] falha na verificacao de alertas"));
   });
 
   cron.schedule("* * * * *", () => {
-    dispararLembretes().catch((err) => logger.error(err, "[worker] falha ao disparar lembretes"));
+    dispararLembretes().catch((err) => logger.error(err, "[scheduler] falha ao disparar lembretes"));
   });
 
   cron.schedule("0 6 * * *", () => {
-    consolidarMemoria().catch((err) => logger.error(err, "[worker] falha na consolidacao de memoria"));
+    consolidarMemoria().catch((err) => logger.error(err, "[scheduler] falha na consolidacao de memoria"));
   });
 
-  logger.info("worker iniciado - agendamentos ativos");
-
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.on(signal, async () => {
-      logger.info({ signal }, "encerrando worker");
-      await pool.end();
-      process.exit(0);
-    });
-  }
+  logger.info("scheduler iniciado - agendamentos ativos");
 }
-
-main().catch((err) => {
-  logger.error(err, "falha ao iniciar o worker");
-  process.exit(1);
-});

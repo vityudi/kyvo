@@ -5,6 +5,7 @@ import { pool } from "./db/pool.js";
 import { logger } from "./lib/logger.js";
 import { adminRoutes } from "./routes/admin.js";
 import { telegramRoutes } from "./routes/telegram.js";
+import { iniciarScheduler } from "./scheduler.js";
 
 async function main(): Promise<void> {
   await runMigrations();
@@ -21,6 +22,8 @@ async function main(): Promise<void> {
 
   const address = await app.listen({ host: "0.0.0.0", port: env.PORT });
   logger.info(`servidor escutando em ${address}`);
+
+  iniciarScheduler();
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
