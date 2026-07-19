@@ -11,6 +11,11 @@
 #              e roda os agendamentos (alertas proativos, lembretes, consolidacao de
 #              memoria) no mesmo processo via node-cron (ver src/scheduler.ts) -
 #              consolidado num unico servico para caber em infra pequena/free tier.
+#   caddy    - reverse proxy com TLS automatico (Let's Encrypt), unico servico
+#              exposto publicamente (80/443). Precisa de KYVO_DOMAIN em
+#              apps/api/.env apontando (DNS) pro IP publico da maquina - ver
+#              Caddyfile. Sem dominio proprio, o nip.io resolve isso de graca
+#              (ex.: 18-231-252-111.nip.io para o IP 18.231.252.111).
 
 services:
   postgres:
@@ -40,8 +45,10 @@ services:
       - apps/api/.env
     environment:
       POSTGRES_HOST: postgres
-    ports:
-      - "${PORT:-3000}:3000"
+    # Nao exponha ao host/publico - so o "caddy" fala com o "app" (rede
+    # interna do compose). Descomente so para depurar localmente sem TLS.
+    # ports:
+    #   - "${PORT:-3000}:3000"
     volumes:
       - kyvo_uploads:/app/uploads
     depends_on:
@@ -54,6 +61,24 @@ services:
       retries: 5
       start_period: 10s
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      KYVO_DOMAIN: ${KYVO_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - kyvo_caddy_data:/data
+      - kyvo_caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
 volumes:
   kyvo_postgres_data:
   kyvo_uploads:
+  kyvo_caddy_data:
+  kyvo_caddy_config:

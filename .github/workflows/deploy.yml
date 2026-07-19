@@ -1,0 +1,42 @@
+name: Deploy to EC2
+
+# Faz o servidor puxar o codigo novo e reconstruir os containers toda vez que
+# a main muda. apps/api/.env fica so no servidor (fora do git), entao o
+# "git reset --hard" abaixo nunca toca nos segredos de producao.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/kyvo
+            git fetch origin main
+            git reset --hard origin/main
+            sudo docker compose --env-file apps/api/.env up --build -d
+            sudo docker image prune -f
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sleep 5
+            # "app" nao publica porta pro host (so o "caddy" fala com ele),
+            # entao o check roda de dentro do proprio container.
+            sudo docker exec kyvo-app-1 wget -qO- http://127.0.0.1:3000/health || (echo "health check falhou" && exit 1)

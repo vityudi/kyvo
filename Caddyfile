@@ -1,0 +1,7 @@
+# Reverse proxy com TLS automatico (Let's Encrypt) na frente do "app".
+# KYVO_DOMAIN vem de apps/api/.env (ver docker-compose.yml, servico "caddy").
+{$KYVO_DOMAIN} {
+	encode gzip
+
+	reverse_proxy app:3000
+}
