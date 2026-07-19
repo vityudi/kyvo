@@ -6,6 +6,12 @@ import {
   criarTarefa,
   listarPendencias,
 } from "../db/lembrete.js";
+import {
+  adicionarItemTarefa,
+  listarItensTarefa,
+  marcarItemTarefa,
+  removerItemTarefa,
+} from "../db/tarefaItem.js";
 import { criarOuAtualizarOrcamento } from "../db/orcamento.js";
 import { atualizarMeta, criarMeta } from "../db/meta.js";
 import { buscarInsights, excluirInsight, registrarInsight } from "../db/memoriaInsight.js";
@@ -251,7 +257,7 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "criar_tarefa",
     description:
-      "Cria uma tarefa/afazer para o usuário rastrear, ex.: 'preciso revisar meu orçamento esse mês', 'tenho que pesquisar um plano de saúde novo'. Diferente de criar_lembrete, uma tarefa NÃO gera nenhum aviso automático pelo Telegram - é só um item de checklist que o usuário consulta e marca como concluído quando quiser, via listar_pendencias e concluir_tarefa. Use esta tool quando o usuário quiser guardar um afazer sem um horário de aviso específico; se o usuário quiser ser avisado numa hora marcada, use criar_lembrete.",
+      "Cria uma tarefa/afazer para o usuário rastrear, ex.: 'preciso revisar meu orçamento esse mês', 'tenho que pesquisar um plano de saúde novo'. Diferente de criar_lembrete, uma tarefa NÃO gera nenhum aviso automático pelo Telegram - é só um item de checklist que o usuário consulta e marca como concluído quando quiser, via listar_pendencias e concluir_tarefa. Também serve como o 'container' de uma lista com subitens (ex.: lista de compras, checklist de viagem) - crie a tarefa primeiro (ex.: descricao='Lista de compras do mercado') e depois use adicionar_item_tarefa para ir populando os itens um a um. Use esta tool quando o usuário quiser guardar um afazer sem um horário de aviso específico; se o usuário quiser ser avisado numa hora marcada, use criar_lembrete.",
     input_schema: {
       type: "object",
       properties: {
@@ -301,13 +307,67 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "cancelar_pendencia",
     description:
-      "Cancela um lembrete ou tarefa pendente que o usuário não quer mais, ex.: 'esquece aquele lembrete da fatura', 'cancela a tarefa de revisar o orçamento'. Use o id retornado por criar_lembrete/criar_tarefa ou encontrado via listar_pendencias; se não tiver certeza de qual é, liste primeiro com listar_pendencias.",
+      "Cancela um lembrete ou tarefa pendente que o usuário não quer mais, ex.: 'esquece aquele lembrete da fatura', 'cancela a tarefa de revisar o orçamento'. Cancelar uma tarefa que é uma lista (ex.: lista de compras) também descarta os itens dela. Use o id retornado por criar_lembrete/criar_tarefa ou encontrado via listar_pendencias; se não tiver certeza de qual é, liste primeiro com listar_pendencias.",
     input_schema: {
       type: "object",
       properties: {
         id: { type: "string", format: "uuid" },
       },
       required: ["id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "adicionar_item_tarefa",
+    description:
+      "Adiciona um item/subitem a uma tarefa que funciona como lista (ex.: 'bota arroz na lista de compras', 'adiciona comprar passagem na checklist da viagem'). A tarefa precisa já existir - se o usuário ainda não tem uma lista para esse propósito, crie uma com criar_tarefa antes. Se não tiver certeza de qual tarefa é a lista certa, use listar_pendencias para encontrar o id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tarefa_id: { type: "string", format: "uuid", description: "Id da tarefa (lista) à qual o item pertence" },
+        descricao: { type: "string", description: "O item em si, de forma objetiva e curta, ex.: 'Arroz', 'Comprar passagem'" },
+      },
+      required: ["tarefa_id", "descricao"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "remover_item_tarefa",
+    description:
+      "Remove definitivamente um item de uma lista/tarefa, ex.: 'tira o leite da lista', 'remove aquele item que coloquei errado'. Diferente de marcar_item_tarefa, isso apaga o item - use quando o usuário não quer mais o item na lista, não quando ele só terminou/comprou o item.",
+    input_schema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", format: "uuid" },
+      },
+      required: ["item_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "marcar_item_tarefa",
+    description:
+      "Marca um item de uma lista/tarefa como concluído (ex.: 'já comprei o arroz', 'marca a passagem como feita') ou desfaz isso (ex.: 'na verdade ainda não comprei o leite'). Use o id retornado por adicionar_item_tarefa ou encontrado via listar_itens_tarefa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", format: "uuid" },
+        concluido: { type: "boolean", description: "true para marcar como feito/comprado, false para desmarcar. Default: true." },
+      },
+      required: ["item_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_itens_tarefa",
+    description:
+      "Lista os itens de uma tarefa que funciona como lista, ex.: 'o que já tem na lista de compras?', 'o que falta na checklist da viagem?'. Use o tarefa_id retornado por criar_tarefa ou encontrado via listar_pendencias.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tarefa_id: { type: "string", format: "uuid" },
+      },
+      required: ["tarefa_id"],
       additionalProperties: false,
     },
   },
@@ -530,6 +590,14 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return concluirTarefa(usuarioId, input.id);
     case "cancelar_pendencia":
       return cancelarPendencia(usuarioId, input.id);
+    case "adicionar_item_tarefa":
+      return adicionarItemTarefa(usuarioId, input.tarefa_id, input.descricao);
+    case "remover_item_tarefa":
+      return removerItemTarefa(usuarioId, input.item_id);
+    case "marcar_item_tarefa":
+      return marcarItemTarefa(usuarioId, input.item_id, input.concluido ?? true);
+    case "listar_itens_tarefa":
+      return listarItensTarefa(usuarioId, input.tarefa_id);
     default:
       throw new Error(`tool desconhecida: ${name}`);
   }
