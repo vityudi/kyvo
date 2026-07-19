@@ -111,6 +111,12 @@ Painel web em modo dev: `npm run dev:web`.
 
 ---
 
+## Deploy
+
+Produção roda numa EC2 via Docker Compose, com Caddy na frente fazendo TLS automático (Let's Encrypt) - ver `Caddyfile` e o serviço `caddy` em `docker-compose.yml`. Todo push na `main` dispara `.github/workflows/deploy.yml`, que entra via SSH, atualiza o código (`git reset --hard origin/main`) e reconstrói os containers (`docker compose up --build -d`) automaticamente.
+
+---
+
 ## Estrutura do projeto
 
 ```
