@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger.js";
+import { agoraSp, partesSp, resolverDataHoraLocalSp } from "../lib/tempo.js";
 import { categoriaValida, contaPadrao } from "./categoria.js";
 import { pool } from "./pool.js";
 
@@ -10,6 +11,7 @@ export interface Transacao {
   descricao: string | null;
   fonte: string | null;
   data: string;
+  data_hora: string;
 }
 
 interface RegistrarDespesaInput {
@@ -17,6 +19,7 @@ interface RegistrarDespesaInput {
   categoria: string;
   descricao: string;
   data?: string;
+  hora?: string;
   conta_id?: string;
   confianca?: "alta" | "media" | "baixa";
 }
@@ -26,6 +29,7 @@ interface RegistrarReceitaInput {
   fonte: string;
   descricao?: string;
   data?: string;
+  hora?: string;
   conta_id?: string;
   confianca?: "alta" | "media" | "baixa";
 }
@@ -36,6 +40,30 @@ interface EditarTransacaoInput {
   categoria?: string;
   descricao?: string;
   data?: string;
+  hora?: string;
+}
+
+/**
+ * Resolve o `data_hora` a persistir a partir dos campos opcionais `data`
+ * (YYYY-MM-DD) e `hora` (HH:mm[:ss]) informados pelo usuario/agente. Quando
+ * so um dos dois vem preenchido, completa a parte que falta com a data ou
+ * hora atuais (fuso America/Sao_Paulo) em vez de zerar - ex.: informar so a
+ * `hora` de uma despesa de hoje nao deve jogar a data para outro dia.
+ * Retorna undefined quando nenhum dos dois foi informado, para o insert usar
+ * o default now() do banco.
+ */
+function resolverNovaDataHora(data?: string, hora?: string): string | undefined {
+  if (!data && !hora) return undefined;
+  const agora = agoraSp();
+  return resolverDataHoraLocalSp(`${data ?? agora.data}T${hora ?? agora.hora}`);
+}
+
+/** Mesma ideia de `resolverNovaDataHora`, mas para edicao: a parte omitida
+ * herda do `data_hora` atual da transacao, nao da hora "agora". */
+function resolverDataHoraEdicao(atual: Date | string, novaData?: string, novaHora?: string): string | undefined {
+  if (!novaData && !novaHora) return undefined;
+  const atuais = partesSp(atual);
+  return resolverDataHoraLocalSp(`${novaData ?? atuais.data}T${novaHora ?? atuais.hora}`);
 }
 
 interface ConsultarTransacoesInput {
@@ -88,7 +116,14 @@ async function totalReceitasNoMes(usuarioId: string, data: string): Promise<numb
 export async function registrarDespesa(
   usuarioId: string,
   input: RegistrarDespesaInput,
-): Promise<{ transacao_id: string; valor: number; categoria: string; data: string; saldo_categoria_mes: number }> {
+): Promise<{
+  transacao_id: string;
+  valor: number;
+  categoria: string;
+  data: string;
+  data_hora: string;
+  saldo_categoria_mes: number;
+}> {
   if (!(await categoriaValida(usuarioId, input.categoria, "despesa"))) {
     throw new Error(
       `categoria "${input.categoria}" nao reconhecida para despesas. Use uma categoria conhecida do usuario ou "outros".`,
@@ -96,12 +131,13 @@ export async function registrarDespesa(
   }
 
   const contaId = input.conta_id ?? (await contaPadrao(usuarioId));
+  const dataHora = resolverNovaDataHora(input.data, input.hora);
 
-  const { rows } = await pool.query<{ id: string; valor: string; categoria: string; data: string }>(
-    `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, descricao, data, confianca)
-     values ($1, $2, 'despesa', $3, $4, $5, coalesce($6::date, current_date), $7)
-     returning id, valor, categoria, data`,
-    [usuarioId, contaId, input.valor, input.categoria, input.descricao, input.data ?? null, input.confianca ?? null],
+  const { rows } = await pool.query<{ id: string; valor: string; categoria: string; data: string; data_hora: string }>(
+    `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, descricao, data_hora, confianca)
+     values ($1, $2, 'despesa', $3, $4, $5, coalesce($6::timestamptz, now()), $7)
+     returning id, valor, categoria, data, data_hora`,
+    [usuarioId, contaId, input.valor, input.categoria, input.descricao, dataHora ?? null, input.confianca ?? null],
   );
 
   const criada = rows[0];
@@ -116,6 +152,7 @@ export async function registrarDespesa(
     valor: Number(criada.valor),
     categoria: criada.categoria,
     data: criada.data,
+    data_hora: criada.data_hora,
     saldo_categoria_mes: saldoCategoriaMes,
   };
 }
@@ -123,17 +160,25 @@ export async function registrarDespesa(
 export async function registrarReceita(
   usuarioId: string,
   input: RegistrarReceitaInput,
-): Promise<{ transacao_id: string; valor: number; fonte: string; data: string; total_receitas_mes: number }> {
+): Promise<{
+  transacao_id: string;
+  valor: number;
+  fonte: string;
+  data: string;
+  data_hora: string;
+  total_receitas_mes: number;
+}> {
   const contaId = input.conta_id ?? (await contaPadrao(usuarioId));
+  const dataHora = resolverNovaDataHora(input.data, input.hora);
 
   // categoria e denormalizada como texto livre (ver schema) - para receita
   // reaproveitamos a propria "fonte" como categoria, ja que a tool
   // registrar_receita nao expoe um campo categoria separado.
-  const { rows } = await pool.query<{ id: string; valor: string; fonte: string; data: string }>(
-    `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, fonte, descricao, data, confianca)
-     values ($1, $2, 'receita', $3, $4, $4, $5, coalesce($6::date, current_date), $7)
-     returning id, valor, fonte, data`,
-    [usuarioId, contaId, input.valor, input.fonte, input.descricao ?? null, input.data ?? null, input.confianca ?? null],
+  const { rows } = await pool.query<{ id: string; valor: string; fonte: string; data: string; data_hora: string }>(
+    `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, fonte, descricao, data_hora, confianca)
+     values ($1, $2, 'receita', $3, $4, $4, $5, coalesce($6::timestamptz, now()), $7)
+     returning id, valor, fonte, data, data_hora`,
+    [usuarioId, contaId, input.valor, input.fonte, input.descricao ?? null, dataHora ?? null, input.confianca ?? null],
   );
 
   const criada = rows[0];
@@ -148,13 +193,14 @@ export async function registrarReceita(
     valor: Number(criada.valor),
     fonte: criada.fonte,
     data: criada.data,
+    data_hora: criada.data_hora,
     total_receitas_mes: totalReceitasMes,
   };
 }
 
 async function buscarTransacao(usuarioId: string, transacaoId: string): Promise<Transacao> {
   const { rows } = await pool.query<Transacao>(
-    "select id, tipo, valor, categoria, descricao, fonte, data from transacao where id = $1 and usuario_id = $2",
+    "select id, tipo, valor, categoria, descricao, fonte, data, data_hora from transacao where id = $1 and usuario_id = $2",
     [transacaoId, usuarioId],
   );
   const transacao = rows[0];
@@ -171,22 +217,24 @@ export async function editarTransacao(usuarioId: string, input: EditarTransacaoI
     throw new Error(`categoria "${input.categoria}" nao reconhecida para ${atual.tipo}s.`);
   }
 
+  const novaDataHora = resolverDataHoraEdicao(atual.data_hora, input.data, input.hora);
+
   const { rows } = await pool.query<Transacao>(
     `update transacao
         set valor         = coalesce($3, valor),
             categoria     = coalesce($4, categoria),
             descricao     = coalesce($5, descricao),
-            data          = coalesce($6::date, data),
+            data_hora     = coalesce($6::timestamptz, data_hora),
             atualizado_em = now()
       where id = $1 and usuario_id = $2
-      returning id, tipo, valor, categoria, descricao, fonte, data`,
+      returning id, tipo, valor, categoria, descricao, fonte, data, data_hora`,
     [
       input.transacao_id,
       usuarioId,
       input.valor ?? null,
       input.categoria ?? null,
       input.descricao ?? null,
-      input.data ?? null,
+      novaDataHora ?? null,
     ],
   );
 
@@ -216,14 +264,14 @@ export async function consultarTransacoes(usuarioId: string, input: ConsultarTra
   const offset = input.offset ?? 0;
 
   const { rows } = await pool.query<Transacao>(
-    `select id, tipo, valor, categoria, descricao, fonte, data
+    `select id, tipo, valor, categoria, descricao, fonte, data, data_hora
        from transacao
       where usuario_id = $1
         and data between $2::date and $3::date
         and ($4::text = 'todos' or tipo = $4)
         and ($5::text is null or lower(categoria) = lower($5))
         and ($6::uuid is null or conta_id = $6)
-      order by data desc, criado_em desc
+      order by data_hora desc
       limit $7
       offset $8`,
     [usuarioId, input.data_inicio, input.data_fim, tipo, input.categoria ?? null, input.conta_id ?? null, limite, offset],

@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
 import { excluirTransacao, listarTransacoes, type Transacao, type TipoTransacao } from "../apiFinancas";
 import { corCategoria, corTextoBadgeCategoria } from "../lib/categoriaCores";
-import { rotuloMesAno, type IntervaloData } from "../lib/tempo";
+import { formatarHorario, rotuloMesAno, type IntervaloData } from "../lib/tempo";
 import { useTheme } from "../lib/theme";
+import { LancamentosFuturosTab } from "./LancamentosFuturosTab";
 import { SeletorPeriodo, type Periodo } from "./SeletorPeriodo";
 import { TransacaoFormModal } from "./TransacaoFormModal";
+
+type AbaTransacoes = "extrato" | "futuros";
 
 const LIMITE_PAGINA = 30;
 // "Sem limite inferior" pro modo extrato (periodo "dia" = "Hoje") - mostra da
@@ -38,6 +41,7 @@ interface ResumoCategoria {
 export function TransacoesView() {
   const { escuro } = useTheme();
   const corTextoBadge = corTextoBadgeCategoria(escuro);
+  const [aba, setAba] = useState<AbaTransacoes>("extrato");
   const [periodoAtivo, setPeriodoAtivo] = useState<Periodo>("dia");
   const [intervalo, setIntervalo] = useState<IntervaloData | null>(null);
   const [tipo, setTipo] = useState<TipoTransacao | "todos">("todos");
@@ -228,7 +232,9 @@ export function TransacoesView() {
         <span className={`w-[128px] shrink-0 text-[15px] font-bold ${cor}`}>
           {sinal} {formatarValor(t.valor)}
         </span>
-        <span className="w-[100px] shrink-0 text-[13px] font-medium text-text-tertiary">{formatarData(t.data)}</span>
+        <span className="w-[128px] shrink-0 text-[13px] font-medium text-text-tertiary">
+          {formatarData(t.data)} <span className="text-text-tertiary/70">· {formatarHorario(t.data_hora)}</span>
+        </span>
         <span
           style={{ backgroundColor: corCategoria(t.categoria), color: corTextoBadge }}
           className="w-[140px] shrink-0 truncate rounded-full px-3 py-1 text-center text-[11.5px] font-bold uppercase tracking-wide"
@@ -284,7 +290,32 @@ export function TransacoesView() {
   }
 
   return (
-    <div className="flex h-full flex-col p-5">
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 gap-1 border-b border-border-subtle px-5 pt-4">
+        {(
+          [
+            ["extrato", "Extrato"],
+            ["futuros", "Lançamentos futuros"],
+          ] as const
+        ).map(([valor, rotulo]) => (
+          <button
+            key={valor}
+            onClick={() => setAba(valor)}
+            className={`rounded-t-[10px] px-4 py-2.5 text-[13px] font-bold transition ${
+              aba === valor
+                ? "border-b-2 border-accent text-accent"
+                : "border-b-2 border-transparent text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            {rotulo}
+          </button>
+        ))}
+      </div>
+
+      {aba === "futuros" ? (
+        <LancamentosFuturosTab />
+      ) : (
+    <div className="flex min-h-0 flex-1 flex-col p-5">
       <div className="mb-5 flex flex-wrap items-center gap-2.5">
         <SeletorPeriodo periodoInicial="dia" reiniciarSinal={reiniciarSinal} onChange={handleIntervaloChange} />
 
@@ -441,6 +472,8 @@ export function TransacoesView() {
           }}
           onSalvo={handleSalvo}
         />
+      )}
+    </div>
       )}
     </div>
   );

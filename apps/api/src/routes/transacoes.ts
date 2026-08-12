@@ -26,6 +26,7 @@ interface CriarTransacaoBody {
   fonte?: string;
   descricao?: string;
   data?: string;
+  hora?: string;
 }
 
 interface EditarTransacaoBody {
@@ -33,6 +34,7 @@ interface EditarTransacaoBody {
   categoria?: string;
   descricao?: string;
   data?: string;
+  hora?: string;
 }
 
 interface ResumoQuery {
@@ -64,7 +66,7 @@ export async function transacoesRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: CriarTransacaoBody }>("/web/api/transacoes", async (request, reply) => {
-    const { tipo, valor, categoria, fonte, descricao, data } = request.body;
+    const { tipo, valor, categoria, fonte, descricao, data, hora } = request.body;
     const usuario = await obterUsuarioUnico();
 
     try {
@@ -72,13 +74,13 @@ export async function transacoesRoutes(app: FastifyInstance): Promise<void> {
         if (!categoria) {
           return reply.code(400).send({ ok: false, erro: "informe a categoria da despesa" });
         }
-        return await registrarDespesa(usuario.id, { valor, categoria, descricao: descricao ?? "", data });
+        return await registrarDespesa(usuario.id, { valor, categoria, descricao: descricao ?? "", data, hora });
       }
 
       if (!fonte) {
         return reply.code(400).send({ ok: false, erro: "informe a fonte da receita" });
       }
-      return await registrarReceita(usuario.id, { valor, fonte, descricao, data });
+      return await registrarReceita(usuario.id, { valor, fonte, descricao, data, hora });
     } catch (err) {
       return reply.code(400).send({ ok: false, erro: err instanceof Error ? err.message : String(err) });
     }

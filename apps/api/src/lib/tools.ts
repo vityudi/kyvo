@@ -12,6 +12,13 @@ import {
   marcarItemTarefa,
   removerItemTarefa,
 } from "../db/tarefaItem.js";
+import {
+  cancelarLancamentoFuturo,
+  confirmarLancamentoFuturo,
+  criarLancamentoFuturo,
+  editarLancamentoFuturo,
+  listarLancamentosFuturos,
+} from "../db/lancamentoFuturo.js";
 import { criarOuAtualizarOrcamento } from "../db/orcamento.js";
 import { atualizarMeta, criarMeta } from "../db/meta.js";
 import { buscarInsights, excluirInsight, registrarInsight } from "../db/memoriaInsight.js";
@@ -27,6 +34,7 @@ import {
   resumoPeriodo,
 } from "../db/transacao.js";
 import { logger } from "./logger.js";
+import { resolverDataHoraLocalSp } from "./tempo.js";
 import type { ToolDefinition } from "./llm/types.js";
 
 /**
@@ -51,6 +59,12 @@ const baseToolDefinitions: ToolDefinition[] = [
         },
         descricao: { type: "string", description: "Descrição curta do gasto, ex.: 'iFood - jantar', 'Uber para reunião'" },
         data: { type: "string", format: "date", description: "Data da despesa no formato YYYY-MM-DD. Omitir para usar a data de hoje." },
+        hora: {
+          type: "string",
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$",
+          description:
+            "Horário da despesa no formato HH:mm (24h, fuso America/Sao_Paulo) — importante para a ordem correta quando o usuário registra mais de uma transação no mesmo dia. Resolva a partir do que o usuário disser (ex.: 'de manhã' ≈ 09:00, 'à noite' ≈ 20:00); se ele não der nenhuma pista de horário, omita este campo para usar o horário atual.",
+        },
         conta_id: { type: "string", format: "uuid", description: "Conta à qual a despesa pertence. Omitir para usar a conta padrão do usuário." },
         confianca: {
           type: "string",
@@ -73,6 +87,12 @@ const baseToolDefinitions: ToolDefinition[] = [
         fonte: { type: "string", description: "Origem da receita, ex.: 'salário', 'freelance - projeto X', 'venda de item usado'" },
         descricao: { type: "string", description: "Descrição adicional opcional" },
         data: { type: "string", format: "date", description: "Data da receita no formato YYYY-MM-DD. Omitir para usar a data de hoje." },
+        hora: {
+          type: "string",
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$",
+          description:
+            "Horário da receita no formato HH:mm (24h, fuso America/Sao_Paulo) — importante para a ordem correta quando há mais de uma transação no mesmo dia. Se o usuário não der nenhuma pista de horário, omita este campo para usar o horário atual.",
+        },
         conta_id: { type: "string", format: "uuid", description: "Conta à qual a receita pertence. Omitir para usar a conta padrão do usuário." },
         confianca: {
           type: "string",
@@ -95,7 +115,12 @@ const baseToolDefinitions: ToolDefinition[] = [
         valor: { type: "number", exclusiveMinimum: 0 },
         categoria: { type: "string" },
         descricao: { type: "string" },
-        data: { type: "string", format: "date" },
+        data: { type: "string", format: "date", description: "Nova data (YYYY-MM-DD). Informe só se o usuário quiser corrigir o dia." },
+        hora: {
+          type: "string",
+          pattern: "^\\d{2}:\\d{2}(:\\d{2})?$",
+          description: "Novo horário (HH:mm, fuso America/Sao_Paulo). Informe só se o usuário quiser corrigir o horário.",
+        },
       },
       required: ["transacao_id"],
       additionalProperties: false,
@@ -113,6 +138,103 @@ const baseToolDefinitions: ToolDefinition[] = [
         motivo: { type: "string", description: "Motivo da exclusão, para auditoria (ex.: 'duplicada', 'registrada por engano')" },
       },
       required: ["transacao_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "criar_lancamento_futuro",
+    description:
+      "Registra um lançamento futuro: uma despesa ou receita que o usuário sabe que vai acontecer numa data futura (ex.: aluguel, assinatura, salário esperado, uma parcela) e quer ver planejada com antecedência. NÃO é a mesma coisa que registrar_gasto/registrar_receita (que são para algo que JÁ aconteceu) — use esta tool quando o usuário falar no futuro ('tenho que pagar', 'vou receber', 'me lembra de pagar'). Também cria automaticamente um lembrete que vai avisar o usuário no Telegram na data prevista. Exemplos: 'me lembra que tenho que pagar o aluguel dia 10' → lançamento futuro de despesa; 'vou receber 500 de freela dia 20' → lançamento futuro de receita. Resolução da data: se o usuário mencionar só o dia do mês (ex.: 'dia 10'), sem mês explícito, calcule a PRÓXIMA ocorrência a partir da data atual informada no system prompt — use o mês corrente se esse dia ainda não tiver passado, ou o mês seguinte se já tiver passado (ex.: hoje é 11/08 e o usuário diz 'dia 10' → 10/09, porque dia 10 de agosto já passou). Se o usuário indicar que é recorrente (ex.: 'todo mês', 'aluguel' — que é tipicamente mensal), preencha recorrencia.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: { type: "string", enum: ["despesa", "receita"] },
+        valor: { type: "number", exclusiveMinimum: 0, description: "Valor previsto em reais (BRL)" },
+        categoria: { type: "string", description: "Categoria (despesa) — obrigatório quando tipo = 'despesa'. Deve corresponder a uma categoria conhecida do usuário; use 'outros' se não tiver certeza." },
+        fonte: { type: "string", description: "Origem (receita) — obrigatório quando tipo = 'receita', ex.: 'salário', 'freelance'." },
+        descricao: { type: "string", description: "Descrição curta, ex.: 'Aluguel do apartamento'" },
+        data_prevista: {
+          type: "string",
+          format: "date",
+          description: "Data prevista (YYYY-MM-DD), já resolvida conforme a regra descrita acima — nunca uma data no passado.",
+        },
+        recorrencia: {
+          type: "string",
+          enum: ["diaria", "semanal", "mensal", "anual"],
+          description: "Se o lançamento se repete (ex.: aluguel = mensal). Omitir se for pontual. Quando definido, ao confirmar uma ocorrência a próxima já é criada automaticamente.",
+        },
+        repeticoes: {
+          type: "integer",
+          minimum: 1,
+          maximum: 99,
+          description: "Quantas vezes repetir no total, contando esta primeira (ex.: usuário diz 'só nos próximos 3 meses' → 3). Só faz sentido junto de recorrencia. Omitir para repetir indefinidamente ('sempre').",
+        },
+        conta_id: { type: "string", format: "uuid", description: "Conta à qual pertence. Omitir para usar a conta padrão do usuário." },
+      },
+      required: ["tipo", "valor", "data_prevista"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_lancamentos_futuros",
+    description:
+      "Lista os lançamentos futuros (despesas/receitas planejadas ainda não confirmadas) do usuário, ordenados pela data prevista mais próxima primeiro. Use para responder perguntas como 'o que eu tenho programado pra pagar?', 'quais contas futuras eu tenho?', ou antes de confirmar/editar/cancelar um lançamento futuro cujo id você não tem em mãos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["pendente", "lancado", "cancelado"], description: "Default: 'pendente'." },
+        tipo: { type: "string", enum: ["despesa", "receita"] },
+        limite: { type: "integer", minimum: 1, maximum: 100, description: "Default: 50." },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "confirmar_lancamento_futuro",
+    description:
+      "Confirma que um lançamento futuro realmente aconteceu (foi pago/recebido), registrando a transação real correspondente e marcando o lançamento futuro como lançado. Use quando o usuário disser algo como 'já paguei o aluguel', 'caiu o salário'. Se o valor ou a data efetivos forem diferentes do que estava previsto, informe valor/data para sobrescrever — por padrão usa o valor e a data que estavam previstos. Use listar_lancamentos_futuros antes se não souber o id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lancamento_id: { type: "string", format: "uuid" },
+        valor: { type: "number", exclusiveMinimum: 0, description: "Valor efetivo, se diferente do previsto." },
+        data: { type: "string", format: "date", description: "Data efetiva (YYYY-MM-DD), se diferente da prevista." },
+        hora: { type: "string", pattern: "^\\d{2}:\\d{2}(:\\d{2})?$", description: "Horário efetivo (HH:mm). Omitir para usar o horário atual." },
+      },
+      required: ["lancamento_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "editar_lancamento_futuro",
+    description:
+      "Corrige valor, categoria, descrição ou data prevista de um lançamento futuro ainda pendente (não confirmado/cancelado). Ajusta automaticamente o lembrete de notificação vinculado se a data ou hora mudarem. Use listar_lancamentos_futuros antes se não souber o id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lancamento_id: { type: "string", format: "uuid" },
+        valor: { type: "number", exclusiveMinimum: 0 },
+        categoria: { type: "string" },
+        descricao: { type: "string" },
+        data_prevista: { type: "string", format: "date" },
+        hora: { type: "string", pattern: "^\\d{2}:\\d{2}(:\\d{2})?$" },
+      },
+      required: ["lancamento_id"],
+      additionalProperties: false,
+      minProperties: 2,
+    },
+  },
+  {
+    name: "cancelar_lancamento_futuro",
+    description:
+      "Cancela um lançamento futuro que não vai mais acontecer (ex.: assinatura cancelada, plano mudou), removendo também o lembrete de notificação vinculado. Use listar_lancamentos_futuros antes se não souber o id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        lancamento_id: { type: "string", format: "uuid" },
+      },
+      required: ["lancamento_id"],
       additionalProperties: false,
     },
   },
@@ -511,18 +633,6 @@ export async function executeTool(name: string, input: unknown, usuarioId: strin
   }
 }
 
-/**
- * Converte um horario local "ingenuo" (sem offset, ex.: '2026-07-20T09:00:00')
- * resolvido pelo modelo em um instante com offset fixo de America/Sao_Paulo,
- * para o Postgres armazenar como timestamptz correto. Nao ha timezone por
- * usuario hoje em nenhuma parte do app, e o Brasil nao observa horario de
- * verao desde 2019, entao um offset fixo -03:00 e seguro. Se o modelo ja
- * incluir um offset/Z, usa como veio.
- */
-function resolverDataHoraLocalSp(dataHoraLocal: string): string {
-  return /Z$|[+-]\d{2}:\d{2}$/.test(dataHoraLocal) ? dataHoraLocal : `${dataHoraLocal}-03:00`;
-}
-
 async function despachar(name: string, input: any, usuarioId: string): Promise<unknown> {
   switch (name) {
     case "registrar_gasto":
@@ -535,6 +645,16 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return excluirTransacao(usuarioId, input.transacao_id, input.motivo);
     case "consultar_transacoes":
       return consultarTransacoes(usuarioId, input);
+    case "criar_lancamento_futuro":
+      return criarLancamentoFuturo(usuarioId, input);
+    case "listar_lancamentos_futuros":
+      return listarLancamentosFuturos(usuarioId, input);
+    case "confirmar_lancamento_futuro":
+      return confirmarLancamentoFuturo(usuarioId, input);
+    case "editar_lancamento_futuro":
+      return editarLancamentoFuturo(usuarioId, input);
+    case "cancelar_lancamento_futuro":
+      return cancelarLancamentoFuturo(usuarioId, input.lancamento_id);
     case "resumo_periodo":
       return resumoPeriodo(usuarioId, input);
     case "consultar_saldo":

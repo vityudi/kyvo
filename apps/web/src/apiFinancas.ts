@@ -10,6 +10,7 @@ export interface Transacao {
   descricao: string | null;
   fonte: string | null;
   data: string;
+  data_hora: string;
 }
 
 export interface FiltroTransacoes {
@@ -37,6 +38,7 @@ export interface NovaTransacaoInput {
   fonte?: string;
   descricao?: string;
   data?: string;
+  hora?: string;
 }
 
 export function criarTransacao(input: NovaTransacaoInput): Promise<unknown> {
@@ -48,6 +50,7 @@ export interface EditarTransacaoInput {
   categoria?: string;
   descricao?: string;
   data?: string;
+  hora?: string;
 }
 
 export function editarTransacao(id: string, input: EditarTransacaoInput): Promise<Transacao> {

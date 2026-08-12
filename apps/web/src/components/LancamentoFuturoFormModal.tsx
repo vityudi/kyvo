@@ -1,56 +1,45 @@
 import { useEffect, useState } from "react";
-import {
-  criarTransacao,
-  editarTransacao,
-  listarCategoriasFinancas,
-  type Transacao,
-  type TipoTransacao,
-} from "../apiFinancas";
+import { criarLancamentoFuturo, editarLancamentoFuturo, type LancamentoFuturo, type Recorrencia } from "../apiLancamentosFuturos";
+import { listarCategoriasFinancas, type TipoTransacao } from "../apiFinancas";
 import { DataInput } from "./DataInput";
 import { Dropdown } from "./Dropdown";
-import { HoraInput } from "./HoraInput";
 import { Modal } from "./Modal";
+import { RepeticoesInput } from "./RepeticoesInput";
 
 interface Props {
-  transacao: Transacao | null;
+  lancamento: LancamentoFuturo | null;
   onFechar: () => void;
   onSalvo: () => void;
 }
 
-function hoje(): string {
+function amanha(): string {
   const d = new Date();
+  d.setDate(d.getDate() + 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function horaAgora(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
+const OPCOES_RECORRENCIA: { value: Recorrencia | ""; label: string }[] = [
+  { value: "", label: "Não se repete" },
+  { value: "mensal", label: "Todo mês" },
+  { value: "semanal", label: "Toda semana" },
+  { value: "anual", label: "Todo ano" },
+  { value: "diaria", label: "Todo dia" },
+];
 
-function horaDe(dataHoraIso: string): string {
-  const d = new Date(dataHoraIso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
-  const editando = transacao !== null;
-  const [tipo, setTipo] = useState<TipoTransacao>(transacao?.tipo ?? "despesa");
-  const [valor, setValor] = useState(transacao ? String(transacao.valor) : "");
-  const [categoria, setCategoria] = useState(transacao?.categoria ?? "");
-  const [fonte, setFonte] = useState(transacao?.fonte ?? "");
-  const [descricao, setDescricao] = useState(transacao?.descricao ?? "");
-  // `transacao.data` vem do backend como timestamp completo - cortamos os 10
-  // primeiros caracteres pra ficar so a data (YYYY-MM-DD).
-  const [data, setData] = useState(transacao?.data.slice(0, 10) ?? hoje());
-  const [hora, setHora] = useState(transacao ? horaDe(transacao.data_hora) : horaAgora());
+export function LancamentoFuturoFormModal({ lancamento, onFechar, onSalvo }: Props) {
+  const editando = lancamento !== null;
+  const [tipo, setTipo] = useState<TipoTransacao>(lancamento?.tipo ?? "despesa");
+  const [valor, setValor] = useState(lancamento ? String(lancamento.valor) : "");
+  const [categoria, setCategoria] = useState(lancamento?.categoria ?? "");
+  const [fonte, setFonte] = useState(lancamento?.fonte ?? "");
+  const [descricao, setDescricao] = useState(lancamento?.descricao ?? "");
+  const [dataPrevista, setDataPrevista] = useState(lancamento?.data_prevista.slice(0, 10) ?? amanha());
+  const [recorrencia, setRecorrencia] = useState<Recorrencia | "">(lancamento?.recorrencia ?? "");
+  const [repeticoes, setRepeticoes] = useState(lancamento?.repeticoes_restantes ?? 0);
   const [categorias, setCategorias] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Fonte da receita tambem usa a lista de categorias conhecidas (tipo
-  // receita), no mesmo dropdown padronizado da categoria de despesa - mantem
-  // os dois rotulos ("Categoria" pra despesa, "Fonte" pra receita) mas com o
-  // mesmo controle visual.
   useEffect(() => {
     listarCategoriasFinancas(tipo)
       .then(setCategorias)
@@ -84,22 +73,22 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
     setErro(null);
     try {
       if (editando) {
-        await editarTransacao(transacao.id, {
+        await editarLancamentoFuturo(lancamento.id, {
           valor: valorNumerico,
           categoria: tipo === "despesa" ? categoria : undefined,
           descricao: descricao || undefined,
-          data,
-          hora,
+          data_prevista: dataPrevista,
         });
       } else {
-        await criarTransacao({
+        await criarLancamentoFuturo({
           tipo,
           valor: valorNumerico,
           categoria: tipo === "despesa" ? categoria : undefined,
           fonte: tipo === "receita" ? fonte : undefined,
           descricao: descricao || undefined,
-          data,
-          hora,
+          data_prevista: dataPrevista,
+          recorrencia: recorrencia || undefined,
+          repeticoes: recorrencia && repeticoes > 0 ? repeticoes : undefined,
         });
       }
       onSalvo();
@@ -113,7 +102,7 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
   const opcoesCategoria = categorias.map((c) => ({ value: c, label: c }));
 
   return (
-    <Modal titulo={editando ? "Editar transação" : "Nova transação"} onFechar={onFechar}>
+    <Modal titulo={editando ? "Editar lançamento futuro" : "Novo lançamento futuro"} onFechar={onFechar}>
       {!editando && (
         <div className="flex gap-1 border-b border-border-subtle px-5">
           <button
@@ -125,7 +114,7 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
                 : "border-b-2 border-transparent text-text-secondary hover:text-text-primary"
             }`}
           >
-            Despesa
+            Despesa futura
           </button>
           <button
             type="button"
@@ -136,14 +125,14 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
                 : "border-b-2 border-transparent text-text-secondary hover:text-text-primary"
             }`}
           >
-            Receita
+            Receita futura
           </button>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 p-5">
         <label className="flex flex-col gap-1.5">
-          <span className="text-[12px] font-semibold text-text-secondary">Valor</span>
+          <span className="text-[12px] font-semibold text-text-secondary">Valor previsto</span>
           <input
             value={valor}
             onChange={(e) => setValor(e.target.value)}
@@ -172,16 +161,23 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
           />
         </label>
 
-        <div className="flex gap-3">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <span className="text-[12px] font-semibold text-text-secondary">Data</span>
-            <DataInput value={data} onChange={setData} />
-          </div>
-          <div className="flex w-[92px] shrink-0 flex-col gap-1.5">
-            <span className="text-[12px] font-semibold text-text-secondary">Hora</span>
-            <HoraInput value={hora} onChange={setHora} />
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[12px] font-semibold text-text-secondary">Data prevista</span>
+          <DataInput value={dataPrevista} onChange={setDataPrevista} />
         </div>
+
+        {!editando && (
+          <div className="flex gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-text-secondary">Repetição</span>
+              <Dropdown value={recorrencia} options={OPCOES_RECORRENCIA} onChange={setRecorrencia} />
+            </div>
+            <div className="flex w-[120px] shrink-0 flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-text-secondary">Quantas vezes</span>
+              <RepeticoesInput value={repeticoes} onChange={setRepeticoes} disabled={!recorrencia} />
+            </div>
+          </div>
+        )}
 
         {erro && <p className="text-[12.5px] text-danger">{erro}</p>}
 
@@ -190,7 +186,7 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
           disabled={salvando}
           className="mt-1 rounded-[10px] bg-accent px-3 py-2.5 text-[13.5px] font-bold text-accent-contrast transition disabled:opacity-60"
         >
-          {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Registrar transação"}
+          {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Criar lançamento futuro"}
         </button>
       </form>
     </Modal>
