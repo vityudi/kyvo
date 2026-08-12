@@ -38,6 +38,7 @@ services:
     #   - "${POSTGRES_PORT:-5432}:5432"
 
   app:
+    image: ${KYVO_APP_IMAGE:-ghcr.io/vityudi/kyvo-app:latest}
     build: .
     command: ["node", "dist/server.js"]
     restart: unless-stopped
