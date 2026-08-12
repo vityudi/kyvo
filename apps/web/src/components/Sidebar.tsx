@@ -3,6 +3,7 @@ import {
   ChartBar,
   Check,
   ChatCircle,
+  CreditCard,
   GearSix,
   ListBullets,
   MagnifyingGlass,
@@ -17,13 +18,14 @@ import { formatarTempoRelativo, rotuloGrupoData } from "../lib/tempo";
 
 interface Props {
   conversaSelecionadaId: string | null;
-  telaAtiva: "transacoes" | "dashboard" | null;
+  telaAtiva: "transacoes" | "dashboard" | "contas" | null;
   onSelecionar: (conversa: ConversaResumo) => void;
   atualizarSinal: number;
   onNovaConversa: () => void;
   onAbrirConfig: () => void;
   onAbrirTransacoes: () => void;
   onAbrirDashboard: () => void;
+  onAbrirContasCartoes: () => void;
   onFechar: () => void;
   onConversaDeletada: (conversaId: string) => void;
 }
@@ -42,6 +44,7 @@ export function Sidebar({
   onAbrirConfig,
   onAbrirTransacoes,
   onAbrirDashboard,
+  onAbrirContasCartoes,
   onFechar,
   onConversaDeletada,
 }: Props) {
@@ -144,6 +147,17 @@ export function Sidebar({
           <ListBullets size={16} className={telaAtiva === "transacoes" ? "text-accent" : "text-text-secondary"} />
           <span className={`text-text-primary ${telaAtiva === "transacoes" ? "font-bold" : "font-semibold"}`}>
             Transações
+          </span>
+        </button>
+        <button
+          onClick={onAbrirContasCartoes}
+          className={`flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left text-[13.5px] transition ${
+            telaAtiva === "contas" ? "bg-accent-soft" : "hover:bg-glass-strong"
+          }`}
+        >
+          <CreditCard size={16} className={telaAtiva === "contas" ? "text-accent" : "text-text-secondary"} />
+          <span className={`text-text-primary ${telaAtiva === "contas" ? "font-bold" : "font-semibold"}`}>
+            Contas
           </span>
         </button>
       </div>

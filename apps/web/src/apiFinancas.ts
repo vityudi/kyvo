@@ -11,6 +11,9 @@ export interface Transacao {
   fonte: string | null;
   data: string;
   data_hora: string;
+  /** Nome do cartão de crédito, se a despesa foi comprada no crédito (ver apiCartoes.ts). Null = dinheiro/débito/pix. */
+  cartao_nome?: string | null;
+  cartao_banco?: string | null;
 }
 
 export interface FiltroTransacoes {
@@ -39,6 +42,7 @@ export interface NovaTransacaoInput {
   descricao?: string;
   data?: string;
   hora?: string;
+  cartao_id?: string;
 }
 
 export function criarTransacao(input: NovaTransacaoInput): Promise<unknown> {

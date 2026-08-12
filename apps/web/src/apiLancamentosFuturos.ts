@@ -16,6 +16,10 @@ export interface LancamentoFuturo {
   repeticoes_restantes: number | null;
   status: StatusLancamentoFuturo;
   transacao_id: string | null;
+  /** Preenchido quando este lançamento representa a fatura em aberto de um cartão - ver apiCartoes.ts. Quando preenchido, `valor` é sempre a soma das compras da fatura (não editável) e `cartao_nome` identifica o cartão. */
+  fatura_id: string | null;
+  cartao_nome: string | null;
+  cartao_banco: string | null;
 }
 
 export interface FiltroLancamentosFuturos {

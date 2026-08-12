@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
 import { excluirTransacao, listarTransacoes, type Transacao, type TipoTransacao } from "../apiFinancas";
+import { bancoPorChave } from "../lib/bancos";
 import { corCategoria, corTextoBadgeCategoria } from "../lib/categoriaCores";
 import { pollingVisivel } from "../lib/pollingVisivel";
 import { formatarHorario, rotuloMesAno, type IntervaloData } from "../lib/tempo";
@@ -244,6 +245,18 @@ export function TransacoesView() {
         </span>
         <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text-primary">
           {t.descricao || <span className="text-text-tertiary">—</span>}
+          {t.cartao_nome &&
+            (() => {
+              const banco = bancoPorChave(t.cartao_banco);
+              return (
+                <span
+                  style={{ background: `linear-gradient(135deg, ${banco.gradiente[0]}, ${banco.gradiente[1]})`, color: banco.corTexto }}
+                  className="ml-2 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide"
+                >
+                  Crédito · {t.cartao_nome}
+                </span>
+              );
+            })()}
         </span>
 
         <span className="flex shrink-0 items-center gap-1">

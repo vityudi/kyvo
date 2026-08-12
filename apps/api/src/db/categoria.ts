@@ -37,15 +37,24 @@ export async function categoriaValida(usuarioId: string, categoria: string, tipo
   return (rowCount ?? 0) > 0;
 }
 
-/** Conta manual padrao criada no primeiro contato do usuario (ver db/usuario.ts). */
+/**
+ * Conta manual padrao criada no primeiro contato do usuario (ver
+ * db/usuario.ts) - usada quando conta_id nao e informado. So funciona
+ * enquanto o usuario tiver exatamente uma conta: assim que ele cadastra uma
+ * segunda (ver db/conta.ts::criarConta), o sistema deixa de assumir
+ * silenciosamente qual foi usada e passa a exigir conta_id explicito em
+ * toda tool/rota que registra algo numa conta.
+ */
 export async function contaPadrao(usuarioId: string): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
-    "select id from conta where usuario_id = $1 order by criado_em asc limit 1",
+    "select id from conta where usuario_id = $1 order by criado_em asc limit 2",
     [usuarioId],
   );
-  const conta = rows[0];
-  if (!conta) {
+  if (rows.length === 0) {
     throw new Error(`usuario ${usuarioId} nao possui nenhuma conta`);
   }
-  return conta.id;
+  if (rows.length > 1) {
+    throw new Error("usuário tem mais de uma conta cadastrada — informe conta_id explicitamente");
+  }
+  return rows[0]!.id;
 }

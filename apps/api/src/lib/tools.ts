@@ -1,4 +1,7 @@
 import { buscarPrincipios } from "../db/baseConhecimento.js";
+import { criarCartao, desativarCartao, editarCartao, listarCartoes } from "../db/cartao.js";
+import { criarConta, editarConta, listarContas } from "../db/conta.js";
+import { listarFaturas } from "../db/fatura.js";
 import {
   cancelarPendencia,
   concluirTarefa,
@@ -37,6 +40,24 @@ import { logger } from "./logger.js";
 import { resolverDataHoraLocalSp } from "./tempo.js";
 import type { ToolDefinition } from "./llm/types.js";
 
+// Chaves reconhecidas pelo painel web para desenhar o cartao com a cor de
+// marca real (ver apps/web/src/lib/bancos.ts - MANTER EM SINCRONIA). So
+// estetico, nao valida nada de negocio - 'outro' cobre qualquer banco fora
+// dessa lista.
+const BANCOS_CONHECIDOS = [
+  "nubank",
+  "itau",
+  "bradesco",
+  "santander",
+  "caixa",
+  "bb",
+  "inter",
+  "c6",
+  "picpay",
+  "will",
+  "outro",
+] as const;
+
 /**
  * As 11 tools de Fase 0/1 especificadas em docs/TOOLS_FASE_0_1.md, com o
  * JSON schema traduzido 1:1 dos exemplos do documento. `usuario_id` nunca
@@ -66,6 +87,12 @@ const baseToolDefinitions: ToolDefinition[] = [
             "Horário da despesa no formato HH:mm (24h, fuso America/Sao_Paulo) — importante para a ordem correta quando o usuário registra mais de uma transação no mesmo dia. Resolva a partir do que o usuário disser (ex.: 'de manhã' ≈ 09:00, 'à noite' ≈ 20:00); se ele não der nenhuma pista de horário, omita este campo para usar o horário atual.",
         },
         conta_id: { type: "string", format: "uuid", description: "Conta à qual a despesa pertence. Omitir para usar a conta padrão do usuário." },
+        cartao_id: {
+          type: "string",
+          format: "uuid",
+          description:
+            "Informe quando o usuário disser que pagou 'no crédito'/'no cartão X' — a compra entra automaticamente na fatura em aberto desse cartão, criando-a se for a primeira compra do ciclo. Omitir para pagamento em dinheiro/débito/pix. Se o usuário mencionar 'cartão' sem dizer qual e ele tiver mais de um cadastrado, use listar_cartoes e pergunte qual.",
+        },
         confianca: {
           type: "string",
           enum: ["alta", "media", "baixa"],
@@ -178,7 +205,7 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "listar_lancamentos_futuros",
     description:
-      "Lista os lançamentos futuros (despesas/receitas planejadas ainda não confirmadas) do usuário, ordenados pela data prevista mais próxima primeiro. Use para responder perguntas como 'o que eu tenho programado pra pagar?', 'quais contas futuras eu tenho?', ou antes de confirmar/editar/cancelar um lançamento futuro cujo id você não tem em mãos.",
+      "Lista os lançamentos futuros (despesas/receitas planejadas ainda não confirmadas) do usuário, ordenados pela data prevista mais próxima primeiro. Use para responder perguntas como 'o que eu tenho programado pra pagar?', 'quais contas futuras eu tenho?', ou antes de confirmar/editar/cancelar um lançamento futuro cujo id você não tem em mãos. Faturas de cartão em aberto aparecem nesta mesma lista (campo fatura_id preenchido, cartao_nome identifica o cartão) com o valor sempre atualizado automaticamente conforme novas compras no crédito entram — não é editável manualmente, só confirmável quando o usuário disser que pagou.",
     input_schema: {
       type: "object",
       properties: {
@@ -193,7 +220,7 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "confirmar_lancamento_futuro",
     description:
-      "Confirma que um lançamento futuro realmente aconteceu (foi pago/recebido), registrando a transação real correspondente e marcando o lançamento futuro como lançado. Use quando o usuário disser algo como 'já paguei o aluguel', 'caiu o salário'. Se o valor ou a data efetivos forem diferentes do que estava previsto, informe valor/data para sobrescrever — por padrão usa o valor e a data que estavam previstos. Use listar_lancamentos_futuros antes se não souber o id.",
+      "Confirma que um lançamento futuro realmente aconteceu (foi pago/recebido), registrando a transação real correspondente e marcando o lançamento futuro como lançado. Use quando o usuário disser algo como 'já paguei o aluguel', 'caiu o salário', 'paguei a fatura do cartão X'. Se o valor ou a data efetivos forem diferentes do que estava previsto, informe valor/data para sobrescrever — por padrão usa o valor e a data que estavam previstos (no caso de fatura de cartão, o total já somado das compras do ciclo). Use listar_lancamentos_futuros antes se não souber o id.",
     input_schema: {
       type: "object",
       properties: {
@@ -209,7 +236,7 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "editar_lancamento_futuro",
     description:
-      "Corrige valor, categoria, descrição ou data prevista de um lançamento futuro ainda pendente (não confirmado/cancelado). Ajusta automaticamente o lembrete de notificação vinculado se a data ou hora mudarem. Use listar_lancamentos_futuros antes se não souber o id.",
+      "Corrige valor, categoria, descrição ou data prevista de um lançamento futuro ainda pendente (não confirmado/cancelado). Ajusta automaticamente o lembrete de notificação vinculado se a data ou hora mudarem. Use listar_lancamentos_futuros antes se não souber o id. Não funciona para lançamentos de fatura de cartão (fatura_id preenchido) — o valor deles é sempre a soma das compras do ciclo, ajuste é feito editando/removendo a transação de crédito.",
     input_schema: {
       type: "object",
       properties: {
@@ -228,13 +255,121 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "cancelar_lancamento_futuro",
     description:
-      "Cancela um lançamento futuro que não vai mais acontecer (ex.: assinatura cancelada, plano mudou), removendo também o lembrete de notificação vinculado. Use listar_lancamentos_futuros antes se não souber o id.",
+      "Cancela um lançamento futuro que não vai mais acontecer (ex.: assinatura cancelada, plano mudou), removendo também o lembrete de notificação vinculado. Use listar_lancamentos_futuros antes se não souber o id. Não funciona para lançamentos de fatura de cartão.",
     input_schema: {
       type: "object",
       properties: {
         lancamento_id: { type: "string", format: "uuid" },
       },
       required: ["lancamento_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "criar_conta",
+    description:
+      "Cadastra uma nova conta bancária (manual) para o usuário separar suas finanças. A maioria dos usuários tem só uma conta e nunca precisa disso — use apenas quando o usuário explicitamente pedir para separar/adicionar uma conta (ex.: 'quero separar minhas finanças em duas contas', 'cria uma conta pra mim chamada Nubank'). A partir da segunda conta, o sistema deixa de assumir automaticamente qual conta usar em novas transações/cartões — passe a informar conta_id ou pergunte ao usuário qual conta usar quando não estiver claro.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nome: { type: "string", description: "Nome/apelido da conta, ex.: 'Conta corrente', 'Nubank'" },
+        saldo_inicial: {
+          type: "number",
+          description: "Saldo que a conta já tinha antes de começar a ser usada aqui (ex.: usuário diz 'já tenho 500 reais nessa conta'). Omitir para começar do zero.",
+        },
+      },
+      required: ["nome"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_contas",
+    description:
+      "Lista as contas bancárias cadastradas do usuário. Use para responder 'quais contas eu tenho' ou para resolver qual conta usar quando o usuário tiver mais de uma e outra tool reclamar que precisa de conta_id explícito.",
+    input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: "editar_conta",
+    description: "Renomeia uma conta existente ou corrige o saldo inicial dela. Use listar_contas antes se não souber o id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        conta_id: { type: "string", format: "uuid" },
+        nome: { type: "string" },
+        saldo_inicial: { type: "number", description: "Novo saldo inicial, se o usuário quiser corrigi-lo." },
+      },
+      required: ["conta_id"],
+      additionalProperties: false,
+      minProperties: 2,
+    },
+  },
+  {
+    name: "criar_cartao",
+    description:
+      "Cadastra um cartão de crédito dentro de uma conta. Pergunte ao usuário o dia de fechamento e o dia de vencimento da fatura se ele não informar — são conceitos diferentes: fechamento é o dia do mês em que a fatura para de acumular compras novas, vencimento é o dia em que ela deve ser paga (geralmente uns dias depois do fechamento). Exemplo: 'cria meu cartão Nubank, fecha dia 25 e vence dia 5'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nome: { type: "string", description: "Nome/apelido do cartão, ex.: 'Nubank', 'Inter Gold'" },
+        dia_fechamento: { type: "integer", minimum: 1, maximum: 31, description: "Dia do mês em que a fatura fecha (para de acumular compras)." },
+        dia_vencimento: { type: "integer", minimum: 1, maximum: 31, description: "Dia do mês em que a fatura fechada deve ser paga." },
+        conta_id: { type: "string", format: "uuid", description: "Conta à qual o cartão pertence. Omitir para usar a conta padrão do usuário." },
+        banco: {
+          type: "string",
+          enum: BANCOS_CONHECIDOS,
+          description: "Banco/emissor do cartão, só para o painel web desenhar o cartão com a cor de marca real. Deduza pelo nome do cartão se possível (ex.: nome 'Nubank' → banco 'nubank'); use 'outro' se não reconhecer ou o usuário não especificar.",
+        },
+      },
+      required: ["nome", "dia_fechamento", "dia_vencimento"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_cartoes",
+    description:
+      "Lista os cartões de crédito ativos do usuário. Use antes de registrar um gasto no crédito para saber o cartao_id certo, ou para responder perguntas como 'quais cartões eu tenho cadastrados'.",
+    input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: "editar_cartao",
+    description: "Corrige nome, dia de fechamento, dia de vencimento ou banco de um cartão existente. Use listar_cartoes antes se não souber o id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cartao_id: { type: "string", format: "uuid" },
+        nome: { type: "string" },
+        dia_fechamento: { type: "integer", minimum: 1, maximum: 31 },
+        dia_vencimento: { type: "integer", minimum: 1, maximum: 31 },
+        banco: { type: "string", enum: BANCOS_CONHECIDOS },
+      },
+      required: ["cartao_id"],
+      additionalProperties: false,
+      minProperties: 2,
+    },
+  },
+  {
+    name: "desativar_cartao",
+    description:
+      "Desativa um cartão que o usuário não usa mais (ex.: cancelou o cartão). Não apaga o histórico de faturas/compras já feitas, só impede novas compras nele e tira ele de listar_cartoes.",
+    input_schema: {
+      type: "object",
+      properties: { cartao_id: { type: "string", format: "uuid" } },
+      required: ["cartao_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_faturas",
+    description:
+      "Lista as faturas (ciclos de fatura) de um cartão, ou de todos os cartões, com o valor total de cada uma. Use para responder perguntas como 'quanto foi minha fatura do Nubank em março', 'minhas faturas fechadas ainda não pagas'. A fatura em aberto atual também aparece em listar_lancamentos_futuros (é a mesma coisa, mostrada de duas formas).",
+    input_schema: {
+      type: "object",
+      properties: {
+        cartao_id: { type: "string", format: "uuid", description: "Filtra por um cartão específico. Omitir para todos os cartões." },
+        status: { type: "string", enum: ["aberta", "fechada", "paga"] },
+        limite: { type: "integer", minimum: 1, maximum: 100, description: "Default: 50." },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -655,6 +790,22 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return editarLancamentoFuturo(usuarioId, input);
     case "cancelar_lancamento_futuro":
       return cancelarLancamentoFuturo(usuarioId, input.lancamento_id);
+    case "criar_conta":
+      return criarConta(usuarioId, input);
+    case "listar_contas":
+      return listarContas(usuarioId);
+    case "editar_conta":
+      return editarConta(usuarioId, input);
+    case "criar_cartao":
+      return criarCartao(usuarioId, input);
+    case "listar_cartoes":
+      return listarCartoes(usuarioId);
+    case "editar_cartao":
+      return editarCartao(usuarioId, input);
+    case "desativar_cartao":
+      return desativarCartao(usuarioId, input.cartao_id);
+    case "listar_faturas":
+      return listarFaturas(usuarioId, input);
     case "resumo_periodo":
       return resumoPeriodo(usuarioId, input);
     case "consultar_saldo":

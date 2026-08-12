@@ -18,6 +18,8 @@ import {
 import { obterResumoGroqConfig, upsertGroqConfig } from "../db/groqConfig.js";
 import { carregarMensagensPaginado } from "../db/mensagem.js";
 import { obterResumoTelegramConfig, upsertTelegramConfig } from "../db/telegramConfig.js";
+import { cartoesRoutes } from "./cartoes.js";
+import { contasRoutes } from "./contas.js";
 import { lancamentosFuturosRoutes } from "./lancamentosFuturos.js";
 import { transacoesRoutes } from "./transacoes.js";
 import type { AnexoPendente, TurnoUsuario } from "../lib/agent.js";
@@ -84,6 +86,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   await app.register(transacoesRoutes);
   await app.register(lancamentosFuturosRoutes);
+  await app.register(contasRoutes);
+  await app.register(cartoesRoutes);
 
   app.get("/web/api/providers", async () => listarProvedores());
 

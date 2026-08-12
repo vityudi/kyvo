@@ -15,15 +15,16 @@ const NOME_PROVIDER: Record<string, string> = {
   deepseek: "DeepSeek",
 };
 
-const TITULO_TELA: Record<"config" | "transacoes" | "dashboard", string> = {
+const TITULO_TELA: Record<"config" | "transacoes" | "dashboard" | "contas", string> = {
   config: "Configurações",
   transacoes: "Transações",
   dashboard: "Dashboard",
+  contas: "Contas",
 };
 
 interface Props {
   sidebarAberta: boolean;
-  tela: "config" | "transacoes" | "dashboard" | "outra";
+  tela: "config" | "transacoes" | "dashboard" | "contas" | "outra";
   onAbrirSidebar: () => void;
   onNovaConversa: () => void;
   onVoltar: () => void;

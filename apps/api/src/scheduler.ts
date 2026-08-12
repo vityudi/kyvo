@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { metasComPrazoProximo, orcamentosEstourados, tentarRegistrarAlerta } from "./db/alertas.js";
 import { detectarAnomalias } from "./db/anomalias.js";
+import { fecharFaturasVencidas } from "./db/fatura.js";
 import { dispararLembretesVencidos } from "./db/lembrete.js";
 import { existeInsightNoPeriodo, registrarInsight } from "./db/memoriaInsight.js";
 import { resumoPeriodo } from "./db/transacao.js";
@@ -137,6 +138,19 @@ async function consolidarMemoria(): Promise<void> {
   logger.info({ usuarios: usuarios.length }, "[scheduler] consolidacao de memoria concluida");
 }
 
+/**
+ * Fecha faturas 'aberta' cujo ciclo ja passou do dia de fechamento - reforco
+ * diario do que obterOuCriarFaturaAberta (db/fatura.ts) ja faz sob demanda
+ * na proxima compra, para ciclos que nao tiveram nenhuma compra nova apos o
+ * fechamento (senao a fatura ficaria 'aberta' indefinidamente).
+ */
+async function fecharFaturas(): Promise<void> {
+  const fechadas = await fecharFaturasVencidas();
+  if (fechadas) {
+    logger.info({ fechadas }, "[scheduler] faturas fechadas");
+  }
+}
+
 /** Registra os cron jobs no processo atual. Chamado uma vez a partir de src/server.ts. */
 export function iniciarScheduler(): void {
   cron.schedule("0 * * * *", () => {
@@ -149,6 +163,10 @@ export function iniciarScheduler(): void {
 
   cron.schedule("0 6 * * *", () => {
     consolidarMemoria().catch((err) => logger.error(err, "[scheduler] falha na consolidacao de memoria"));
+  });
+
+  cron.schedule("0 5 * * *", () => {
+    fecharFaturas().catch((err) => logger.error(err, "[scheduler] falha ao fechar faturas"));
   });
 
   logger.info("scheduler iniciado - agendamentos ativos");

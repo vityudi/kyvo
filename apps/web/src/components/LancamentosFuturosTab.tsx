@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ClockCountdown, PencilSimple, Plus, Repeat, Trash, X } from "@phosphor-icons/react";
+import { Check, ClockCountdown, PencilSimple, Plus, Receipt, Repeat, Trash, X } from "@phosphor-icons/react";
 import {
   cancelarLancamentoFuturo,
   confirmarLancamentoFuturo,
@@ -7,9 +7,11 @@ import {
   type LancamentoFuturo,
   type Recorrencia,
 } from "../apiLancamentosFuturos";
+import { bancoPorChave } from "../lib/bancos";
 import { corCategoria, corTextoBadgeCategoria } from "../lib/categoriaCores";
 import { rotuloMesAno } from "../lib/tempo";
 import { useTheme } from "../lib/theme";
+import { FaturaTransacoesModal } from "./FaturaTransacoesModal";
 import { LancamentoFuturoFormModal } from "./LancamentoFuturoFormModal";
 
 const MESES_PROJECAO = 3;
@@ -96,6 +98,7 @@ export function LancamentosFuturosTab() {
   const [editando, setEditando] = useState<LancamentoFuturo | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [processandoId, setProcessandoId] = useState<string | null>(null);
+  const [verFatura, setVerFatura] = useState<{ faturaId: string; cartaoNome: string | null } | null>(null);
   const [recarregarSinal, setRecarregarSinal] = useState(0);
   const hoje = hojeIso();
 
@@ -252,9 +255,20 @@ export function LancamentosFuturosTab() {
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text-primary">
                       {l.descricao || <span className="text-text-tertiary">—</span>}
+                      {l.fatura_id && (
+                        <span
+                          style={{
+                            background: `linear-gradient(135deg, ${bancoPorChave(l.cartao_banco).gradiente[0]}, ${bancoPorChave(l.cartao_banco).gradiente[1]})`,
+                            color: bancoPorChave(l.cartao_banco).corTexto,
+                          }}
+                          className="ml-2 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide"
+                        >
+                          Fatura{l.cartao_nome ? ` · ${l.cartao_nome}` : ""}
+                        </span>
+                      )}
                     </span>
 
-                    <span className="flex shrink-0 w-[124px] items-center justify-end gap-1">
+                    <span className="flex shrink-0 w-[124px] items-center justify-start gap-1">
                       {l.projetado ? (
                         <span className="text-[11px] font-semibold text-text-tertiary">Próxima ocorrência</span>
                       ) : confirmando ? (
@@ -287,23 +301,36 @@ export function LancamentosFuturosTab() {
                           >
                             <Check size={14} weight="bold" />
                           </button>
-                          <button
-                            onClick={() => {
-                              setEditando(l);
-                              setModalAberto(true);
-                            }}
-                            aria-label="Editar"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary opacity-0 transition hover:bg-glass hover:text-accent group-hover/row:opacity-100"
-                          >
-                            <PencilSimple size={14} />
-                          </button>
-                          <button
-                            onClick={() => setConfirmandoId(l.chave)}
-                            aria-label="Cancelar"
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary opacity-0 transition hover:bg-glass hover:text-danger group-hover/row:opacity-100"
-                          >
-                            <Trash size={14} />
-                          </button>
+                          {l.fatura_id ? (
+                            <button
+                              onClick={() => setVerFatura({ faturaId: l.fatura_id!, cartaoNome: l.cartao_nome })}
+                              aria-label="Ver compras da fatura"
+                              title="Ver compras da fatura"
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary opacity-0 transition hover:bg-glass hover:text-accent group-hover/row:opacity-100"
+                            >
+                              <Receipt size={14} />
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditando(l);
+                                  setModalAberto(true);
+                                }}
+                                aria-label="Editar"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary opacity-0 transition hover:bg-glass hover:text-accent group-hover/row:opacity-100"
+                              >
+                                <PencilSimple size={14} />
+                              </button>
+                              <button
+                                onClick={() => setConfirmandoId(l.chave)}
+                                aria-label="Cancelar"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary opacity-0 transition hover:bg-glass hover:text-danger group-hover/row:opacity-100"
+                              >
+                                <Trash size={14} />
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
                     </span>
@@ -323,6 +350,14 @@ export function LancamentosFuturosTab() {
             setEditando(null);
           }}
           onSalvo={handleSalvo}
+        />
+      )}
+
+      {verFatura && (
+        <FaturaTransacoesModal
+          faturaId={verFatura.faturaId}
+          cartaoNome={verFatura.cartaoNome}
+          onFechar={() => setVerFatura(null)}
         />
       )}
     </div>

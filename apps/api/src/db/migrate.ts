@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Pool } from "pg";
 import { pool } from "./pool.js";
 
@@ -61,8 +61,11 @@ export async function runMigrations(targetPool: Pool = pool): Promise<void> {
 }
 
 // Permite rodar `npm run migrate` isoladamente, alem de ser chamado no boot
-// de server.ts.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// de server.ts. pathToFileURL (em vez de montar a string "file://" + path na
+// mao) normaliza barras invertidas/prefixo no Windows - a comparacao manual
+// nunca batia nesse SO, fazendo o script rodar sem erro mas sem nunca
+// chamar runMigrations().
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runMigrations()
     .then(() => {
       console.log("[migrate] concluido");

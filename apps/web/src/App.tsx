@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ConversaResumo } from "./api";
+import { ContasCartoesView } from "./components/ContasCartoesView";
 import { ConversaView } from "./components/ConversaView";
 import { DashboardView } from "./components/DashboardView";
 import { Home } from "./components/Home";
@@ -15,7 +16,7 @@ interface MensagemInicialPendente {
   arquivo: File | null;
 }
 
-type Tela = "chat" | "config" | "transacoes" | "dashboard";
+type Tela = "chat" | "config" | "transacoes" | "dashboard" | "contas";
 
 export function App() {
   const [conversaSelecionada, setConversaSelecionada] = useState<ConversaResumo | null>(null);
@@ -47,7 +48,7 @@ export function App() {
         <div className="glass-panel relative z-[2] flex h-full w-[284px] shrink-0 flex-col overflow-hidden rounded-[22px] border border-glass-border bg-glass">
           <Sidebar
             conversaSelecionadaId={conversaSelecionada?.id ?? null}
-            telaAtiva={tela === "transacoes" || tela === "dashboard" ? tela : null}
+            telaAtiva={tela === "transacoes" || tela === "dashboard" || tela === "contas" ? tela : null}
             onSelecionar={(conversa) => {
               setTela("chat");
               setConversaSelecionada(conversa);
@@ -57,6 +58,7 @@ export function App() {
             onAbrirConfig={() => setTela("config")}
             onAbrirTransacoes={() => setTela("transacoes")}
             onAbrirDashboard={() => setTela("dashboard")}
+            onAbrirContasCartoes={() => setTela("contas")}
             onFechar={() => setSidebarAberta(false)}
             onConversaDeletada={handleConversaDeletada}
           />
@@ -66,7 +68,7 @@ export function App() {
       <div className="glass-panel relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-glass-border bg-glass">
         <TopBar
           sidebarAberta={sidebarAberta}
-          tela={tela === "config" || tela === "transacoes" || tela === "dashboard" ? tela : "outra"}
+          tela={tela === "config" || tela === "transacoes" || tela === "dashboard" || tela === "contas" ? tela : "outra"}
           onAbrirSidebar={() => setSidebarAberta(true)}
           onNovaConversa={handleNovaConversa}
           onVoltar={() => setTela("chat")}
@@ -81,6 +83,8 @@ export function App() {
             <TransacoesView />
           ) : tela === "dashboard" ? (
             <DashboardView />
+          ) : tela === "contas" ? (
+            <ContasCartoesView />
           ) : conversaSelecionada ? (
             <ConversaView
               key={conversaSelecionada.id}

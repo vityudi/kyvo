@@ -6,10 +6,13 @@ import {
   type Transacao,
   type TipoTransacao,
 } from "../apiFinancas";
+import { listarCartoes, type Cartao } from "../apiCartoes";
 import { DataInput } from "./DataInput";
 import { Dropdown } from "./Dropdown";
 import { HoraInput } from "./HoraInput";
 import { Modal } from "./Modal";
+
+const NENHUM_CARTAO = "";
 
 interface Props {
   transacao: Transacao | null;
@@ -44,8 +47,16 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
   const [data, setData] = useState(transacao?.data.slice(0, 10) ?? hoje());
   const [hora, setHora] = useState(transacao ? horaDe(transacao.data_hora) : horaAgora());
   const [categorias, setCategorias] = useState<string[]>([]);
+  const [cartoes, setCartoes] = useState<Cartao[]>([]);
+  const [cartaoId, setCartaoId] = useState<string>(NENHUM_CARTAO);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    listarCartoes()
+      .then(setCartoes)
+      .catch(() => setCartoes([]));
+  }, []);
 
   // Fonte da receita tambem usa a lista de categorias conhecidas (tipo
   // receita), no mesmo dropdown padronizado da categoria de despesa - mantem
@@ -100,6 +111,7 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
           descricao: descricao || undefined,
           data,
           hora,
+          cartao_id: tipo === "despesa" && cartaoId ? cartaoId : undefined,
         });
       }
       onSalvo();
@@ -182,6 +194,17 @@ export function TransacaoFormModal({ transacao, onFechar, onSalvo }: Props) {
             <HoraInput value={hora} onChange={setHora} />
           </div>
         </div>
+
+        {!editando && tipo === "despesa" && cartoes.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-text-secondary">Cartão de crédito</span>
+            <Dropdown
+              value={cartaoId}
+              options={[{ value: NENHUM_CARTAO, label: "Nenhum (dinheiro/débito/pix)" }, ...cartoes.map((c) => ({ value: c.id, label: c.nome }))]}
+              onChange={setCartaoId}
+            />
+          </div>
+        )}
 
         {erro && <p className="text-[12.5px] text-danger">{erro}</p>}
 

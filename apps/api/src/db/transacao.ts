@@ -1,6 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { agoraSp, partesSp, resolverDataHoraLocalSp } from "../lib/tempo.js";
 import { categoriaValida, contaPadrao } from "./categoria.js";
+import { obterOuCriarFaturaAberta } from "./fatura.js";
 import { pool } from "./pool.js";
 
 export interface Transacao {
@@ -12,6 +13,8 @@ export interface Transacao {
   fonte: string | null;
   data: string;
   data_hora: string;
+  cartao_nome?: string | null;
+  cartao_banco?: string | null;
 }
 
 interface RegistrarDespesaInput {
@@ -21,6 +24,7 @@ interface RegistrarDespesaInput {
   data?: string;
   hora?: string;
   conta_id?: string;
+  cartao_id?: string;
   confianca?: "alta" | "media" | "baixa";
 }
 
@@ -133,14 +137,41 @@ export async function registrarDespesa(
   const contaId = input.conta_id ?? (await contaPadrao(usuarioId));
   const dataHora = resolverNovaDataHora(input.data, input.hora);
 
-  const { rows } = await pool.query<{ id: string; valor: string; categoria: string; data: string; data_hora: string }>(
-    `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, descricao, data_hora, confianca)
-     values ($1, $2, 'despesa', $3, $4, $5, coalesce($6::timestamptz, now()), $7)
-     returning id, valor, categoria, data, data_hora`,
-    [usuarioId, contaId, input.valor, input.categoria, input.descricao, dataHora ?? null, input.confianca ?? null],
-  );
+  let criada: { id: string; valor: string; categoria: string; data: string; data_hora: string } | undefined;
 
-  const criada = rows[0];
+  if (input.cartao_id) {
+    // Compra no credito: precisa amarrar a transacao a fatura do ciclo
+    // corrente do cartao (criando-a se for a primeira compra do ciclo) -
+    // tudo numa unica transacao de banco pra nao deixar fatura orfa se o
+    // insert da transacao falhar.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const faturaId = await obterOuCriarFaturaAberta(usuarioId, input.cartao_id, client);
+      const { rows } = await client.query<{ id: string; valor: string; categoria: string; data: string; data_hora: string }>(
+        `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, descricao, data_hora, confianca, fatura_id)
+         values ($1, $2, 'despesa', $3, $4, $5, coalesce($6::timestamptz, now()), $7, $8)
+         returning id, valor, categoria, data, data_hora`,
+        [usuarioId, contaId, input.valor, input.categoria, input.descricao, dataHora ?? null, input.confianca ?? null, faturaId],
+      );
+      criada = rows[0];
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  } else {
+    const { rows } = await pool.query<{ id: string; valor: string; categoria: string; data: string; data_hora: string }>(
+      `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, descricao, data_hora, confianca)
+       values ($1, $2, 'despesa', $3, $4, $5, coalesce($6::timestamptz, now()), $7)
+       returning id, valor, categoria, data, data_hora`,
+      [usuarioId, contaId, input.valor, input.categoria, input.descricao, dataHora ?? null, input.confianca ?? null],
+    );
+    criada = rows[0];
+  }
+
   if (!criada) {
     throw new Error("falha ao registrar despesa - insert nao retornou linha");
   }
@@ -264,14 +295,16 @@ export async function consultarTransacoes(usuarioId: string, input: ConsultarTra
   const offset = input.offset ?? 0;
 
   const { rows } = await pool.query<Transacao>(
-    `select id, tipo, valor, categoria, descricao, fonte, data, data_hora
-       from transacao
-      where usuario_id = $1
-        and data between $2::date and $3::date
-        and ($4::text = 'todos' or tipo = $4)
-        and ($5::text is null or lower(categoria) = lower($5))
-        and ($6::uuid is null or conta_id = $6)
-      order by data_hora desc
+    `select t.id, t.tipo, t.valor, t.categoria, t.descricao, t.fonte, t.data, t.data_hora, c.nome as cartao_nome, c.banco as cartao_banco
+       from transacao t
+       left join fatura f on f.id = t.fatura_id
+       left join cartao c on c.id = f.cartao_id
+      where t.usuario_id = $1
+        and t.data between $2::date and $3::date
+        and ($4::text = 'todos' or t.tipo = $4)
+        and ($5::text is null or lower(t.categoria) = lower($5))
+        and ($6::uuid is null or t.conta_id = $6)
+      order by t.data_hora desc
       limit $7
       offset $8`,
     [usuarioId, input.data_inicio, input.data_fim, tipo, input.categoria ?? null, input.conta_id ?? null, limite, offset],

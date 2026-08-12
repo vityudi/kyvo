@@ -19,6 +19,10 @@ export interface LancamentoFuturo {
   repeticoes_restantes: number | null;
   status: StatusLancamentoFuturo;
   transacao_id: string | null;
+  /** Preenchido quando este lancamento futuro representa a fatura em aberto de um cartao - ver db/fatura.ts. Quando preenchido, `valor` e sempre a soma das compras da fatura (nunca editavel manualmente) e `cartao_nome` identifica o cartao. */
+  fatura_id: string | null;
+  cartao_nome: string | null;
+  cartao_banco: string | null;
 }
 
 interface CriarLancamentoFuturoInput {
@@ -72,6 +76,9 @@ function mapRow(row: {
   repeticoes_restantes: number | null;
   status: string;
   transacao_id: string | null;
+  fatura_id?: string | null;
+  cartao_nome?: string | null;
+  cartao_banco?: string | null;
 }): LancamentoFuturo {
   return {
     id: row.id,
@@ -85,8 +92,19 @@ function mapRow(row: {
     repeticoes_restantes: row.repeticoes_restantes,
     status: row.status as StatusLancamentoFuturo,
     transacao_id: row.transacao_id,
+    fatura_id: row.fatura_id ?? null,
+    cartao_nome: row.cartao_nome ?? null,
+    cartao_banco: row.cartao_banco ?? null,
   };
 }
+
+// Quando fatura_id esta preenchido, `valor` NUNCA vem da coluna - e sempre
+// recalculado como soma das compras de credito daquele ciclo (ver
+// db/fatura.ts), pra fatura em aberto crescer sozinha a cada nova compra
+// sem exigir edicao manual (ver criarLancamentoFuturo/obterOuCriarFaturaAberta).
+const VALOR_CAMPO_CALCULADO = `case when lf.fatura_id is not null
+     then coalesce((select sum(t.valor) from transacao t where t.fatura_id = lf.fatura_id), 0)
+     else lf.valor end as valor`;
 
 async function buscarLancamentoFuturo(
   usuarioId: string,
@@ -97,12 +115,15 @@ async function buscarLancamentoFuturo(
   // src/db/transacao.ts), o que quebraria a concatenacao de string em
   // resolverNovaDataHora/resolverDataHoraEdicao/avancarData mais abaixo.
   const { rows } = await pool.query(
-    `select lf.id, lf.conta_id, lf.tipo, lf.valor, lf.categoria, lf.descricao, lf.fonte,
+    `select lf.id, lf.conta_id, lf.tipo, ${VALOR_CAMPO_CALCULADO}, lf.categoria, lf.descricao, lf.fonte,
             to_char(lf.data_prevista, 'YYYY-MM-DD') as data_prevista,
             lf.recorrencia, lf.repeticoes_restantes, lf.status, lf.transacao_id,
-            lf.lembrete_id, l.data_hora as lembrete_data_hora
+            lf.lembrete_id, l.data_hora as lembrete_data_hora,
+            lf.fatura_id, c.nome as cartao_nome, c.banco as cartao_banco
        from lancamento_futuro lf
        left join lembrete l on l.id = lf.lembrete_id
+       left join fatura f on f.id = lf.fatura_id
+       left join cartao c on c.id = f.cartao_id
       where lf.id = $1 and lf.usuario_id = $2`,
     [lancamentoId, usuarioId],
   );
@@ -181,12 +202,17 @@ export async function listarLancamentosFuturos(
   const limite = input.limite ?? 50;
 
   const { rows } = await pool.query(
-    `select ${SELECT_CAMPOS}
-       from lancamento_futuro
-      where usuario_id = $1
-        and status = $2
-        and ($3::text is null or tipo = $3)
-      order by data_prevista asc
+    `select lf.id, lf.tipo, ${VALOR_CAMPO_CALCULADO}, lf.categoria, lf.descricao, lf.fonte,
+            to_char(lf.data_prevista, 'YYYY-MM-DD') as data_prevista,
+            lf.recorrencia, lf.repeticoes_restantes, lf.status, lf.transacao_id,
+            lf.fatura_id, c.nome as cartao_nome, c.banco as cartao_banco
+       from lancamento_futuro lf
+       left join fatura f on f.id = lf.fatura_id
+       left join cartao c on c.id = f.cartao_id
+      where lf.usuario_id = $1
+        and lf.status = $2
+        and ($3::text is null or lf.tipo = $3)
+      order by lf.data_prevista asc
       limit $4`,
     [usuarioId, status, input.tipo ?? null, limite],
   );
@@ -200,6 +226,9 @@ export async function editarLancamentoFuturo(
   const atual = await buscarLancamentoFuturo(usuarioId, input.lancamento_id);
   if (atual.status !== "pendente") {
     throw new Error(`lancamento futuro ja esta ${atual.status}, nao pode ser editado`);
+  }
+  if (atual.fatura_id && input.valor != null) {
+    throw new Error("faturas têm valor calculado automaticamente a partir das compras — edite/exclua a transação de crédito em vez disso");
   }
   if (input.categoria && !(await categoriaValida(usuarioId, input.categoria, atual.tipo))) {
     throw new Error(`categoria "${input.categoria}" nao reconhecida para ${atual.tipo}s.`);
@@ -246,12 +275,24 @@ export async function confirmarLancamentoFuturo(
     throw new Error(`lancamento futuro ja esta ${atual.status}`);
   }
 
+  // Para faturas, `atual.valor` ja veio recalculado via SUM (buscarLancamentoFuturo)
+  // - usa-lo como default aqui garante que o pagamento reflete exatamente o
+  // total das compras do ciclo, mesmo que tenham entrado depois da criacao.
   const valor = input.valor ?? atual.valor;
   const data = input.data ?? atual.data_prevista;
+  const descricaoPagamento = atual.fatura_id
+    ? atual.descricao ?? `Pagamento fatura ${atual.cartao_nome ?? "cartão"}`
+    : atual.descricao ?? atual.categoria;
 
   const resultado =
     atual.tipo === "despesa"
-      ? await registrarDespesa(usuarioId, { valor, categoria: atual.categoria, descricao: atual.descricao ?? atual.categoria, data, hora: input.hora })
+      ? await registrarDespesa(usuarioId, {
+          valor,
+          categoria: atual.fatura_id ? "fatura de cartão" : atual.categoria,
+          descricao: descricaoPagamento,
+          data,
+          hora: input.hora,
+        })
       : await registrarReceita(usuarioId, { valor, fonte: atual.fonte ?? atual.categoria, descricao: atual.descricao ?? undefined, data, hora: input.hora });
 
   await pool.query(
@@ -260,6 +301,13 @@ export async function confirmarLancamentoFuturo(
       where id = $1 and usuario_id = $2`,
     [input.lancamento_id, usuarioId, resultado.transacao_id],
   );
+
+  if (atual.fatura_id) {
+    await pool.query(
+      `update fatura set status = 'paga', transacao_pagamento_id = $2, atualizado_em = now() where id = $1`,
+      [atual.fatura_id, resultado.transacao_id],
+    );
+  }
 
   // Recorrente: confirmar uma ocorrencia nao deve fazer a cadeia toda
   // desaparecer - cria de ja a proxima ocorrencia pendente (mesmo
@@ -311,6 +359,9 @@ export async function cancelarLancamentoFuturo(
   lancamentoId: string,
 ): Promise<{ lancamento_id: string; ok: true }> {
   const atual = await buscarLancamentoFuturo(usuarioId, lancamentoId);
+  if (atual.fatura_id) {
+    throw new Error("faturas não podem ser canceladas — cancele/exclua as transações de crédito do ciclo em vez disso");
+  }
   if (atual.status !== "pendente") {
     throw new Error(`lancamento futuro ja esta ${atual.status}`);
   }
