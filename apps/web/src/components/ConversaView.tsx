@@ -21,7 +21,8 @@ interface MensagemInicial {
 
 interface Props {
   conversaId: string;
-  telegramChatId: number;
+  telegramChatId: number | null;
+  arquivada?: boolean;
   onMensagemEnviada: () => void;
   /** Mensagem ja digitada na tela de "nova conversa" (Home.tsx) - enviada assim que a view monta, pra navegar direto pro chat em vez de esperar a resposta do agente antes de trocar de tela. */
   mensagemInicial?: MensagemInicial | null;
@@ -30,11 +31,12 @@ interface Props {
 
 let contadorOtimista = 0;
 
-const ACEITA_ANEXO = "image/*,audio/*,application/pdf";
+const ACEITA_ANEXO = "image/*,audio/*,application/pdf,.csv,.ofx,text/csv,application/x-ofx";
 
 export function ConversaView({
   conversaId,
   telegramChatId,
+  arquivada = false,
   onMensagemEnviada,
   mensagemInicial,
   onMensagemInicialConsumida,
@@ -46,6 +48,8 @@ export function ConversaView({
   const [texto, setTexto] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
+  /** Arquivo da mensagem otimista em voo - preview local (object URL), ja que ainda nao existe anexo persistido/URL do servidor pra ele. */
+  const [arquivoOtimista, setArquivoOtimista] = useState<{ msgId: string; file: File } | null>(null);
   const [erroEnvio, setErroEnvio] = useState<string | null>(null);
   const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null);
 
@@ -134,6 +138,7 @@ export function ConversaView({
       ...(atual ?? []),
       { id: idOtimista, role: "user", conteudo, criadoEm: new Date().toISOString(), anexos: [] },
     ]);
+    if (arquivoParaEnviar) setArquivoOtimista({ msgId: idOtimista, file: arquivoParaEnviar });
     setEnviando(true);
     enviandoRef.current = true;
     setErroEnvio(null);
@@ -157,12 +162,13 @@ export function ConversaView({
     } finally {
       setEnviando(false);
       enviandoRef.current = false;
+      setArquivoOtimista(null);
     }
   }
 
   async function handleEnviar() {
     const conteudo = texto.trim();
-    if ((!conteudo && !arquivo) || enviando) return;
+    if ((!conteudo && !arquivo) || enviando || arquivada) return;
 
     const arquivoParaEnviar = arquivo;
     setTexto("");
@@ -187,11 +193,15 @@ export function ConversaView({
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 px-6 py-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-glass-strong text-xs font-bold text-text-secondary">
-          {String(telegramChatId).slice(-2)}
+          {telegramChatId != null ? String(telegramChatId).slice(-2) : "🖥️"}
         </div>
         <div>
-          <p className="text-[13.5px] font-bold text-text-primary">Usuário #{telegramChatId}</p>
-          <p className="text-[11.5px] text-text-secondary">Telegram · chat {telegramChatId}</p>
+          <p className="text-[13.5px] font-bold text-text-primary">
+            {telegramChatId != null ? `Usuário #${telegramChatId}` : "Painel web"}
+          </p>
+          <p className="text-[11.5px] text-text-secondary">
+            {telegramChatId != null ? `Telegram · chat ${telegramChatId}` : "Sem contato pelo Telegram ainda"}
+          </p>
         </div>
       </header>
 
@@ -243,6 +253,11 @@ export function ConversaView({
                             ))}
                           </div>
                         )}
+                        {arquivoOtimista?.msgId === m.id && (
+                          <div className="mb-2">
+                            <AnexoPreviewLocal arquivo={arquivoOtimista.file} />
+                          </div>
+                        )}
                         {conteudoExibivel && <p className="whitespace-pre-wrap">{conteudoExibivel}</p>}
                         <p className="mt-1 text-[10px] opacity-70">{formatarHorario(m.criadoEm)}</p>
                       </div>
@@ -274,6 +289,7 @@ export function ConversaView({
                     </div>
                   );
                 })}
+                {enviando && <IndicadorDigitando />}
               </div>
             </>
           )}
@@ -313,7 +329,7 @@ export function ConversaView({
             />
             <button
               onClick={() => inputArquivoRef.current?.click()}
-              disabled={enviando}
+              disabled={enviando || arquivada}
               aria-label="Anexar arquivo"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-secondary transition hover:bg-glass disabled:opacity-40"
             >
@@ -328,23 +344,30 @@ export function ConversaView({
                   handleEnviar();
                 }
               }}
-              placeholder="Enviar mensagem como este usuário…"
+              placeholder={arquivada ? "Esta conversa foi arquivada" : "Enviar mensagem como este usuário…"}
               rows={1}
-              disabled={enviando}
+              disabled={enviando || arquivada}
               className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"
             />
             <button
               onClick={handleEnviar}
-              disabled={enviando || (!texto.trim() && !arquivo)}
+              disabled={enviando || arquivada || (!texto.trim() && !arquivo)}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-contrast transition active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Enviar mensagem"
             >
               <ArrowUp size={16} weight="bold" />
             </button>
           </div>
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-text-tertiary">
-            <ChatsCircle size={13} />A resposta do assistente é enviada de volta pro Telegram deste usuário também.
-          </p>
+          {arquivada ? (
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-text-tertiary">
+              <WarningCircle size={13} />
+              Conversa arquivada — não é possível enviar novas mensagens.
+            </p>
+          ) : (
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-text-tertiary">
+              <ChatsCircle size={13} />A resposta do assistente é enviada de volta pro Telegram deste usuário também.
+            </p>
+          )}
         </div>
       </div>
 
@@ -353,6 +376,51 @@ export function ConversaView({
           <img src={imagemAmpliada} alt="Anexo ampliado" className="max-h-[75vh] w-full object-contain" />
         </Modal>
       )}
+    </div>
+  );
+}
+
+/** Preview do anexo da bolha otimista, antes de existir um anexo persistido/URL do servidor pra ele - usa um object URL local a partir do File escolhido. */
+function AnexoPreviewLocal({ arquivo }: { arquivo: File }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(arquivo);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [arquivo]);
+
+  if (!url) return null;
+
+  if (arquivo.type.startsWith("image/")) {
+    return <img src={url} alt={arquivo.name} className="max-h-64 w-full rounded-xl object-cover" />;
+  }
+
+  if (arquivo.type.startsWith("audio/")) {
+    return <audio controls src={url} className="h-9 max-w-full" />;
+  }
+
+  const Icone = arquivo.type === "application/pdf" ? FilePdf : File;
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-current/20 px-3 py-2 text-sm opacity-90">
+      <Icone size={18} />
+      <span className="truncate">{arquivo.name}</span>
+    </div>
+  );
+}
+
+/** Indicador de "digitando" enquanto o agente processa o turno - extratos grandes podem levar dezenas de segundos, sem isso parece que travou. */
+function IndicadorDigitando() {
+  return (
+    <div className="flex items-start gap-2.5">
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-accent-deep text-[9.5px] font-extrabold text-accent-contrast">
+        K
+      </div>
+      <div className="flex items-center gap-1 rounded-2xl bg-glass-strong px-3.5 py-3">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" />
+      </div>
     </div>
   );
 }

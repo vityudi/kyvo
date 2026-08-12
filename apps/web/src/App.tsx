@@ -122,6 +122,7 @@ export function App() {
               key={conversaSelecionada.id}
               conversaId={conversaSelecionada.id}
               telegramChatId={conversaSelecionada.telegramChatId}
+              arquivada={conversaSelecionada.status === "arquivada"}
               onMensagemEnviada={() => setAtualizarSinal((n) => n + 1)}
               mensagemInicial={
                 mensagemInicialPendente?.conversaId === conversaSelecionada.id
@@ -131,7 +132,7 @@ export function App() {
               onMensagemInicialConsumida={() => setMensagemInicialPendente(null)}
             />
           ) : (
-            <Home conversas={conversas} onConversaCriada={handleConversaCriada} />
+            <Home onConversaCriada={handleConversaCriada} />
           )}
         </main>
       </div>

@@ -8,6 +8,7 @@ import type { FastifyInstance } from "fastify";
 import { env } from "../config/env.js";
 import { obterAnexoParaDownload, type TipoAnexo } from "../db/anexo.js";
 import { deletarConversa, iniciarNovaConversa, listarConversas, obterConversaComUsuario } from "../db/conversa.js";
+import { obterOuCriarUsuarioWeb } from "../db/usuario.js";
 import {
   ativarProvedor,
   listarProvedores,
@@ -29,6 +30,9 @@ import { createDeepseekClient } from "../lib/llm/deepseekClient.js";
 import { LlmNaoConfiguradoError } from "../lib/llm/index.js";
 import type { ContentPart } from "../lib/llm/types.js";
 import { salvarArquivo, streamArquivo } from "../lib/storage.js";
+import { ehArquivoDeExtrato, ExtratoParseError, montarResumoExtratoParaLlm, parseExtrato } from "../lib/extrato/index.js";
+import type { LinhaExtrato } from "../lib/extrato/tipos.js";
+import { logger } from "../lib/logger.js";
 import {
   getTelegramBotStatus,
   sendTelegramMessageComRetentativa,
@@ -198,6 +202,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     pluggyConfigurado: Boolean(env.PLUGGY_CLIENT_ID && env.PLUGGY_CLIENT_SECRET),
   }));
 
+  // Resolve/cria o (unico) usuario para o painel poder conversar mesmo sem
+  // nenhum contato pelo Telegram ainda (basta ter um provedor de IA ativo) -
+  // usado pela Home quando a lista de conversas ainda esta vazia.
+  app.get("/web/api/usuario", async () => {
+    const usuario = await obterOuCriarUsuarioWeb();
+    return { id: usuario.id, telegramChatId: usuario.telegram_chat_id };
+  });
+
   app.get("/web/api/conversas", async () => listarConversas());
 
   app.post<{ Params: { usuarioId: string } }>("/web/api/usuarios/:usuarioId/conversas", async (request) =>
@@ -226,10 +238,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!conversa) {
       return reply.code(404).send({ ok: false, erro: "conversa nao encontrada" });
     }
+    if (conversa.status === "arquivada") {
+      return reply.code(409).send({ ok: false, erro: "conversa arquivada, nao aceita novas mensagens" });
+    }
 
     let texto = "";
     const conteudoParaLlm: ContentPart[] = [];
     const anexosParaPersistir: AnexoPendente[] = [];
+    const linhasExtratoAnexado: LinhaExtrato[] = [];
 
     if (request.isMultipart()) {
       const parts = request.parts();
@@ -241,13 +257,22 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         if (part.type === "file") {
           const buffer = await part.toBuffer();
           const mimeType = part.mimetype || "application/octet-stream";
-          const salvo = await salvarArquivo(buffer, mimeType);
+          const salvo = await salvarArquivo(buffer, mimeType, part.filename);
           const tipo = tipoAnexoPorMime(mimeType);
 
           if (tipo === "imagem") {
             conteudoParaLlm.push({ type: "image", mimeType, data: buffer.toString("base64") });
           } else if (mimeType === "application/pdf") {
             conteudoParaLlm.push({ type: "document", mimeType, data: buffer.toString("base64"), nome: part.filename });
+          } else if (ehArquivoDeExtrato(part.filename, mimeType)) {
+            try {
+              const resultado = parseExtrato(buffer, part.filename ?? "", mimeType);
+              conteudoParaLlm.push({ type: "text", text: montarResumoExtratoParaLlm(resultado, part.filename ?? "extrato") });
+              linhasExtratoAnexado.push(...resultado.linhas);
+            } catch (err) {
+              const motivo = err instanceof ExtratoParseError ? err.message : "erro inesperado ao ler o arquivo";
+              conteudoParaLlm.push({ type: "text", text: `[não consegui ler o extrato "${part.filename ?? "sem nome"}": ${motivo}]` });
+            }
           }
 
           anexosParaPersistir.push({
@@ -272,21 +297,28 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     // da Bot API) - sem isso, quem manda mensagem pelo painel via essa mensagem
     // nunca aparece no chat real do Telegram, so a resposta do assistente.
     // Ecoa antes de processar para preservar a ordem (pergunta, depois resposta).
-    const partesEco: string[] = [];
-    if (texto) partesEco.push(texto);
-    if (anexosParaPersistir.length > 0) {
-      partesEco.push(`[${anexosParaPersistir.length} anexo(s) enviado(s) pelo painel]`);
+    // Sem telegramChatId (usuario ainda nao falou com o bot no Telegram - ver
+    // obterOuCriarUsuarioWeb), nao ha pra onde ecoar - a conversa segue so no painel.
+    if (conversa.telegramChatId != null) {
+      const partesEco: string[] = [];
+      if (texto) partesEco.push(texto);
+      if (anexosParaPersistir.length > 0) {
+        partesEco.push(`[${anexosParaPersistir.length} anexo(s) enviado(s) pelo painel]`);
+      }
+      await sendTelegramMessageComRetentativa(
+        conversa.telegramChatId,
+        `🖥️ Mensagem enviada pelo painel:\n${partesEco.join("\n")}`,
+      );
     }
-    await sendTelegramMessageComRetentativa(
-      conversa.telegramChatId,
-      `🖥️ Mensagem enviada pelo painel:\n${partesEco.join("\n")}`,
-    );
 
     let resposta: string;
     try {
-      const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir };
+      const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir, linhasExtratoAnexado };
       resposta = await processarMensagem(conversa.id, conversa.usuarioId, turno);
     } catch (err) {
+      if (!(err instanceof LlmNaoConfiguradoError)) {
+        logger.error({ err, conversaId: conversa.id }, "falha ao processar mensagem via painel web");
+      }
       const erro =
         err instanceof LlmNaoConfiguradoError
           ? "Ainda não estou configurado — configure um provedor de IA nesta página."
@@ -298,7 +330,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     // foi persistida em `mensagem` acima, entao uma falha transitoria so na
     // entrega nao deve virar um 502 aqui - o painel e o Telegram devem
     // sempre concordar sobre o que de fato aconteceu na conversa.
-    await sendTelegramMessageComRetentativa(conversa.telegramChatId, resposta);
+    if (conversa.telegramChatId != null) {
+      await sendTelegramMessageComRetentativa(conversa.telegramChatId, resposta);
+    }
     return { ok: true, resposta };
   });
 

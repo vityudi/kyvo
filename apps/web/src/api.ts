@@ -124,10 +124,20 @@ export function salvarConfigGroq(apiKey: string): Promise<ApiOk> {
   });
 }
 
+export interface UsuarioWeb {
+  id: string;
+  telegramChatId: number | null;
+}
+
+/** Resolve/cria o (unico) usuario do app - da pra conversar pelo painel mesmo sem contato pelo Telegram ainda. */
+export function obterUsuarioWeb(): Promise<UsuarioWeb> {
+  return request("/web/api/usuario");
+}
+
 export interface ConversaResumo {
   id: string;
   usuarioId: string;
-  telegramChatId: number;
+  telegramChatId: number | null;
   titulo: string | null;
   status: "ativa" | "arquivada";
   ultimaMensagem: string | null;

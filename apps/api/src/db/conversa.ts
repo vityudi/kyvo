@@ -145,9 +145,14 @@ export async function deletarConversa(conversaId: string): Promise<boolean> {
 /** Resolve usuario/telegram_chat_id a partir de uma conversa - usado pela rota admin de "enviar como usuario". */
 export async function obterConversaComUsuario(
   conversaId: string,
-): Promise<{ id: string; usuarioId: string; telegramChatId: number } | null> {
-  const { rows } = await pool.query<{ id: string; usuario_id: string; telegram_chat_id: number }>(
-    `select c.id, c.usuario_id, u.telegram_chat_id
+): Promise<{ id: string; usuarioId: string; telegramChatId: number | null; status: "ativa" | "arquivada" } | null> {
+  const { rows } = await pool.query<{
+    id: string;
+    usuario_id: string;
+    telegram_chat_id: number | null;
+    status: "ativa" | "arquivada";
+  }>(
+    `select c.id, c.usuario_id, u.telegram_chat_id, c.status
        from conversa c
        join usuario u on u.id = c.usuario_id
       where c.id = $1`,
@@ -155,13 +160,13 @@ export async function obterConversaComUsuario(
   );
   const row = rows[0];
   if (!row) return null;
-  return { id: row.id, usuarioId: row.usuario_id, telegramChatId: row.telegram_chat_id };
+  return { id: row.id, usuarioId: row.usuario_id, telegramChatId: row.telegram_chat_id, status: row.status };
 }
 
 export interface ConversaResumo {
   id: string;
   usuarioId: string;
-  telegramChatId: number;
+  telegramChatId: number | null;
   titulo: string | null;
   status: "ativa" | "arquivada";
   ultimaMensagem: string | null;
@@ -181,7 +186,7 @@ export async function listarConversas(): Promise<ConversaResumo[]> {
   const { rows } = await pool.query<{
     id: string;
     usuario_id: string;
-    telegram_chat_id: number;
+    telegram_chat_id: number | null;
     titulo: string | null;
     status: "ativa" | "arquivada";
     ultima_mensagem: string | null;

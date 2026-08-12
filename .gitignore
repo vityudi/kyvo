@@ -17,6 +17,7 @@ npm-debug.log*
 
 # Anexos de mensagem enviados via Telegram/admin (filesystem local, ver src/lib/storage.ts)
 /uploads/
+apps/api/uploads/
 
 # Editor / SO
 .DS_Store

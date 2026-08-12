@@ -20,10 +20,25 @@ const EXTENSAO_POR_MIME: Record<string, string> = {
   "audio/mpeg": ".mp3",
   "audio/mp4": ".m4a",
   "application/pdf": ".pdf",
+  "text/csv": ".csv",
+  "application/vnd.ms-excel": ".csv",
+  "application/x-ofx": ".ofx",
 };
 
-function extensaoParaMime(mimeType: string): string {
-  return EXTENSAO_POR_MIME[mimeType] ?? "";
+const EXTENSOES_RECONHECIDAS_POR_NOME = new Set([".csv", ".ofx"]);
+
+/**
+ * CSV/OFX chegam com mimetype pouco confiavel (Telegram manda
+ * application/octet-stream pra varios tipos de documento, browsers variam
+ * pra .csv) - quando o mimetype nao resolve, cai pro nome original do
+ * arquivo se a extensao for uma das reconhecidas.
+ */
+function extensaoParaMime(mimeType: string, nomeOriginal?: string): string {
+  const porMime = EXTENSAO_POR_MIME[mimeType];
+  if (porMime) return porMime;
+
+  const extensaoNome = nomeOriginal ? `.${nomeOriginal.toLowerCase().split(".").pop()}` : "";
+  return EXTENSOES_RECONHECIDAS_POR_NOME.has(extensaoNome) ? extensaoNome : "";
 }
 
 export interface ArquivoSalvo {
@@ -32,10 +47,10 @@ export interface ArquivoSalvo {
 }
 
 /** Salva o buffer sob um nome aleatorio dentro de UPLOADS_DIR; retorna o caminho relativo salvo no banco. */
-export async function salvarArquivo(buffer: Buffer, mimeType: string): Promise<ArquivoSalvo> {
+export async function salvarArquivo(buffer: Buffer, mimeType: string, nomeOriginal?: string): Promise<ArquivoSalvo> {
   await mkdir(env.UPLOADS_DIR, { recursive: true });
 
-  const nomeArquivo = `${randomUUID()}${extensaoParaMime(mimeType)}`;
+  const nomeArquivo = `${randomUUID()}${extensaoParaMime(mimeType, nomeOriginal)}`;
   const caminhoAbsoluto = path.join(env.UPLOADS_DIR, nomeArquivo);
   await writeFile(caminhoAbsoluto, buffer);
 

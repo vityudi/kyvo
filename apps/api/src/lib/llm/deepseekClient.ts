@@ -72,15 +72,33 @@ export function createDeepseekClient(apiKey: string, model: string): LlmClient {
 
       const content: ContentPart[] = [];
       if (choice.message.content) content.push({ type: "text", text: choice.message.content });
+
+      // Truncamento no meio dos argumentos de uma tool call (tool call grande
+      // demais pro max_tokens pedido) as vezes vem com finish_reason
+      // "tool_calls" em vez de "length" - o JSON.parse falharia e derrubaria
+      // a chamada inteira. Trata como se fosse max_tokens (agent.ts ja tem
+      // logica pra lidar com resposta truncada/vazia) em vez de propagar o
+      // erro de parse cru pro chamador.
+      let argumentosTruncados = false;
       for (const tc of choice.message.tool_calls ?? []) {
         if (tc.type !== "function") continue;
-        content.push({ type: "tool_use", id: tc.id, name: tc.function.name, input: JSON.parse(tc.function.arguments) });
+        try {
+          content.push({ type: "tool_use", id: tc.id, name: tc.function.name, input: JSON.parse(tc.function.arguments) });
+        } catch {
+          argumentosTruncados = true;
+        }
       }
 
       const stopReason: CompletionResult["stopReason"] =
-        choice.finish_reason === "tool_calls" ? "tool_use" : choice.finish_reason === "length" ? "max_tokens" : "end_turn";
+        argumentosTruncados
+          ? "max_tokens"
+          : choice.finish_reason === "tool_calls"
+            ? "tool_use"
+            : choice.finish_reason === "length"
+              ? "max_tokens"
+              : "end_turn";
 
-      return { content, stopReason };
+      return { content: argumentosTruncados ? [] : content, stopReason };
     },
   } satisfies LlmClient;
 }

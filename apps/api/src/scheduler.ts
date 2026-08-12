@@ -32,6 +32,11 @@ async function verificarAlertas(): Promise<void> {
   const mesAtual = primeiroDiaMes(new Date());
 
   for (const usuario of usuarios) {
+    // Sem telegram_chat_id (usuario so falou com o bot pelo painel web ate
+    // agora), nao ha canal proativo pra entregar o alerta - o usuario ainda
+    // pode perguntar sobre orcamento/meta pelo chat normalmente.
+    if (usuario.telegram_chat_id == null) continue;
+
     for (const orcamento of await orcamentosEstourados(usuario.id)) {
       const novo = await tentarRegistrarAlerta(usuario.id, "orcamento_estourado", orcamento.categoria, mesAtual);
       if (!novo) continue;
@@ -62,6 +67,8 @@ async function dispararLembretes(): Promise<void> {
   const lembretes = await dispararLembretesVencidos();
 
   for (const lembrete of lembretes) {
+    if (lembrete.telegram_chat_id == null) continue;
+
     try {
       await sendTelegramMessage(lembrete.telegram_chat_id, `Lembrete: ${lembrete.descricao}`);
     } catch (err) {

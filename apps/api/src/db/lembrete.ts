@@ -33,7 +33,7 @@ interface ListarPendenciasInput {
 interface LembreteDisparado {
   id: string;
   descricao: string;
-  telegram_chat_id: number;
+  telegram_chat_id: number | null;
 }
 
 function mapPendencia(row: {

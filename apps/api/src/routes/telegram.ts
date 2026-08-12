@@ -9,6 +9,8 @@ import type { ContentPart } from "../lib/llm/types.js";
 import { transcreverAudio } from "../lib/llm/transcricao.js";
 import { logger } from "../lib/logger.js";
 import { salvarArquivo } from "../lib/storage.js";
+import { ehArquivoDeExtrato, ExtratoParseError, montarResumoExtratoParaLlm, parseExtrato } from "../lib/extrato/index.js";
+import type { LinhaExtrato } from "../lib/extrato/tipos.js";
 import {
   ArquivoTelegramGrandeDemaisError,
   baixarArquivoTelegram,
@@ -22,6 +24,7 @@ interface AnexosProcessados {
   textoAdicional: string;
   conteudoParaLlm: ContentPart[];
   anexosParaPersistir: AnexoPendente[];
+  linhasExtratoAnexado: LinhaExtrato[];
 }
 
 /**
@@ -34,10 +37,11 @@ async function processarAnexos(message: NonNullable<TelegramUpdate["message"]>):
   const avisos: string[] = [];
   const conteudoParaLlm: ContentPart[] = [];
   const anexosParaPersistir: AnexoPendente[] = [];
+  const linhasExtratoAnexado: LinhaExtrato[] = [];
 
-  async function baixarESalvar(fileId: string, fileSize: number | undefined) {
+  async function baixarESalvar(fileId: string, fileSize: number | undefined, nomeOriginal?: string) {
     const { buffer, mimeType } = await baixarArquivoTelegram(fileId, fileSize);
-    const salvo = await salvarArquivo(buffer, mimeType);
+    const salvo = await salvarArquivo(buffer, mimeType, nomeOriginal);
     return { buffer, mimeType, ...salvo };
   }
 
@@ -75,9 +79,18 @@ async function processarAnexos(message: NonNullable<TelegramUpdate["message"]>):
 
     const documento = message.document;
     if (documento) {
-      const { buffer, mimeType, caminho, tamanhoBytes } = await baixarESalvar(documento.file_id, documento.file_size);
+      const { buffer, mimeType, caminho, tamanhoBytes } = await baixarESalvar(documento.file_id, documento.file_size, documento.file_name);
       if (mimeType === "application/pdf") {
         conteudoParaLlm.push({ type: "document", mimeType, data: buffer.toString("base64"), nome: documento.file_name });
+      } else if (ehArquivoDeExtrato(documento.file_name, mimeType)) {
+        try {
+          const resultado = parseExtrato(buffer, documento.file_name ?? "", mimeType);
+          conteudoParaLlm.push({ type: "text", text: montarResumoExtratoParaLlm(resultado, documento.file_name ?? "extrato") });
+          linhasExtratoAnexado.push(...resultado.linhas);
+        } catch (err) {
+          const motivo = err instanceof ExtratoParseError ? err.message : "erro inesperado ao ler o arquivo";
+          avisos.push(`[não consegui ler o extrato "${documento.file_name ?? "sem nome"}": ${motivo}]`);
+        }
       } else {
         avisos.push(`[usuário anexou um arquivo: ${documento.file_name ?? "sem nome"}]`);
       }
@@ -99,7 +112,7 @@ async function processarAnexos(message: NonNullable<TelegramUpdate["message"]>):
     }
   }
 
-  return { textoAdicional: avisos.join("\n"), conteudoParaLlm, anexosParaPersistir };
+  return { textoAdicional: avisos.join("\n"), conteudoParaLlm, anexosParaPersistir, linhasExtratoAnexado };
 }
 
 export async function telegramRoutes(app: FastifyInstance): Promise<void> {
@@ -169,10 +182,10 @@ export async function telegramRoutes(app: FastifyInstance): Promise<void> {
     let resposta: string;
     try {
       const conversa = await obterOuCriarConversaAtiva(usuario.id);
-      const { textoAdicional, conteudoParaLlm, anexosParaPersistir } = await processarAnexos(message);
+      const { textoAdicional, conteudoParaLlm, anexosParaPersistir, linhasExtratoAnexado } = await processarAnexos(message);
 
       const texto = [message.text ?? message.caption ?? "", textoAdicional].filter(Boolean).join("\n");
-      const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir };
+      const turno: TurnoUsuario = { texto, conteudoParaLlm, anexosParaPersistir, linhasExtratoAnexado };
 
       resposta = await processarMensagem(conversa.id, usuario.id, turno);
     } catch (err) {

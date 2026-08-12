@@ -13,6 +13,7 @@ import { carregarHistorico, salvarMensagemUsuario, salvarRespostaAssistente, typ
 import { listarOrcamentos } from "../db/orcamento.js";
 import { obterPerfil } from "../db/perfilUsuario.js";
 import { listarRegras } from "../db/regraCategorizacao.js";
+import type { LinhaExtrato } from "./extrato/tipos.js";
 import { getLlmClient } from "./llm/index.js";
 import type { ChatMessage, ContentPart } from "./llm/types.js";
 import { logger } from "./logger.js";
@@ -20,7 +21,11 @@ import { formatarTranscript, gerarTituloConversa } from "./tituloConversa.js";
 import { executeTool, toolDefinitions } from "./tools.js";
 
 const MAX_TOOL_ITERATIONS = 6;
-const MAX_TOKENS = 4096;
+// 8192 (nao 4096) porque tool calls grandes (ex.: importar_extrato_bancario
+// com dezenas de linhas) podem facilmente passar de 4096 tokens so nos
+// argumentos da chamada, truncando a tool call no meio - ver guarda de
+// resposta vazia abaixo.
+const MAX_TOKENS = 16384;
 const MAX_CONTINUACOES_MAX_TOKENS = 3;
 
 /**
@@ -168,6 +173,14 @@ export interface TurnoUsuario {
   conteudoParaLlm?: ContentPart[];
   /** Anexos ja salvos em disco, persistidos no banco assim que a mensagem do usuario existir. */
   anexosParaPersistir?: AnexoPendente[];
+  /**
+   * Linhas de extrato bancario (OFX/CSV) parseadas deterministicamente neste
+   * turno, na mesma ordem/indice usada no resumo textual mandado pro LLM
+   * (ver montarResumoExtratoParaLlm) - permite a tool importar_extrato_bancario
+   * resolver os dados reais por indice em vez de depender do LLM reescrever
+   * cada linha (mais leve e imune a ele "esquecer"/"julgar fora" uma linha).
+   */
+  linhasExtratoAnexado?: LinhaExtrato[];
 }
 
 /**
@@ -176,7 +189,7 @@ export interface TurnoUsuario {
  * anexos, se houver) e retorna o texto de resposta a ser enviado ao usuario.
  */
 export async function processarMensagem(conversaId: string, usuarioId: string, turno: TurnoUsuario): Promise<string> {
-  const { texto: textoUsuario, conteudoParaLlm = [], anexosParaPersistir = [] } = turno;
+  const { texto: textoUsuario, conteudoParaLlm = [], anexosParaPersistir = [], linhasExtratoAnexado = [] } = turno;
 
   const [systemPrompt, historico, llm] = await Promise.all([
     buildSystemPrompt(usuarioId),
@@ -206,6 +219,20 @@ export async function processarMensagem(conversaId: string, usuarioId: string, t
       messages,
     });
 
+    if (resposta.content.length === 0) {
+      // Resposta truncada por max_tokens antes de produzir qualquer bloco
+      // (texto ou tool_use) - tipico quando o modelo tenta gerar uma tool
+      // call grande demais (ex.: importar_extrato_bancario com muitas
+      // linhas) e estoura o limite logo no comeco. Nao ha nada util pra
+      // empurrar pro historico nem pra "continuar" a partir dai - um turno
+      // de assistant sem texto e sem tool_calls quebra a proxima chamada em
+      // alguns providers (DeepSeek exige um ou outro). Encerra com uma
+      // mensagem clara em vez de propagar esse estado invalido.
+      logger.warn({ usuarioId, conversaId, iteracao, stopReason: resposta.stopReason }, "resposta do LLM veio vazia (provavel truncamento por max_tokens)");
+      textoResposta = "Essa resposta ficou grande demais e não coube no limite - tenta pedir em partes menores (ex.: um extrato com menos lançamentos por vez)?";
+      break;
+    }
+
     messages.push({ role: "assistant", content: resposta.content });
 
     // O modelo bateu o limite de tokens no meio da resposta (ex.: uma tabela
@@ -231,7 +258,7 @@ export async function processarMensagem(conversaId: string, usuarioId: string, t
 
     const toolResults: ContentPart[] = [];
     for (const toolUse of toolUses) {
-      const resultado = await executeTool(toolUse.name, toolUse.input, usuarioId);
+      const resultado = await executeTool(toolUse.name, toolUse.input, usuarioId, { linhasExtrato: linhasExtratoAnexado });
       toolResults.push({
         type: "tool_result",
         toolUseId: toolUse.id,

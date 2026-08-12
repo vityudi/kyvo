@@ -1,6 +1,8 @@
 import { buscarPrincipios } from "../db/baseConhecimento.js";
 import { criarCartao, desativarCartao, editarCartao, listarCartoes } from "../db/cartao.js";
 import { criarConta, editarConta, excluirConta, listarContas } from "../db/conta.js";
+import { importarExtratoBancario } from "../db/extratoImportacao.js";
+import type { LinhaExtrato } from "./extrato/tipos.js";
 import { lancamentoFuturoIdDaFatura, listarFaturas, transacoesDaFatura } from "../db/fatura.js";
 import {
   cancelarPendencia,
@@ -165,6 +167,39 @@ const baseToolDefinitions: ToolDefinition[] = [
         motivo: { type: "string", description: "Motivo da exclusão, para auditoria (ex.: 'duplicada', 'registrada por engano')" },
       },
       required: ["transacao_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "importar_extrato_bancario",
+    description:
+      "Registra em lote os lançamentos de um extrato bancário ou fatura de cartão (OFX/CSV) que o usuário acabou de anexar (identificados no texto da mensagem como '[extrato bancário analisado]', cada um com um índice numérico). Todos os lançamentos listados lá (exceto os da seção 'ignorado(s)', que nunca devem ser mencionados aqui) SÃO registrados automaticamente ao chamar esta tool, com valor/data/descrição vindos exatamente do que já foi extraído do arquivo — você não repassa esses dados, só a categoria. Use 'categorias' para informar a categoria (despesa) ou fonte (receita) de quantos índices você conseguir classificar com confiança a partir das categorias conhecidas do usuário (mantenha a MESMA categoria entre parcelas de uma mesma compra); pode deixar de fora índices ambíguos — eles ainda são registrados, só caem em 'outros' e o usuário reclassifica depois se quiser. Informe conta_id para extrato de conta corrente/poupança, ou cartao_id para fatura de cartão de crédito (nunca os dois — se não estiver claro pelo nome do arquivo/contexto, pergunte ao usuário antes de chamar esta tool). Para fatura de cartão, informe TAMBÉM data_fechamento_fatura — um arquivo de fatura é sempre os lançamentos de UMA fatura só; nunca deduza essa data a partir de um ciclo mensal 'padrão' do cartão (o dia de fechamento pode ter mudado desde então e não é confiável para extratos antigos). A dedução de duplicatas é automática (por identificador do banco ou por conteúdo) — pode chamar esta tool mesmo se o usuário reenviar um extrato já importado antes, sem risco de duplicar. Não tenta casar 'Pagamento de fatura' do extrato de conta com uma fatura específica nem marca fatura como paga — para isso, use pagar_fatura separadamente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        conta_id: { type: "string", format: "uuid", description: "Conta bancária à qual este extrato pertence. Omitir se for fatura de cartão de crédito (usar cartao_id)." },
+        cartao_id: { type: "string", format: "uuid", description: "Cartão de crédito ao qual esta fatura pertence. Omitir se for extrato de conta corrente/poupança (usar conta_id)." },
+        data_fechamento_fatura: {
+          type: "string",
+          format: "date",
+          description:
+            "Obrigatório quando cartao_id é informado (ignorar para conta_id). Data em que ESTA fatura fechou (YYYY-MM-DD) — use a data sugerida no resumo do extrato (geralmente extraída do nome do arquivo) se houver; senão, pergunte ao usuário antes de chamar esta tool ('essa fatura fecha/venceu quando?'). Nunca calcule a partir do ciclo mensal atual do cartão.",
+        },
+        categorias: {
+          type: "array",
+          description: "Categoria/fonte por índice de lançamento, só para os que você conseguir classificar - índices omitidos ainda são registrados, com categoria 'outros'.",
+          items: {
+            type: "object",
+            properties: {
+              indice: { type: "integer", minimum: 1, description: "Número do lançamento, exatamente como veio na lista do extrato analisado." },
+              categoria: { type: "string", description: "Categoria (despesa) ou fonte (receita) atribuída por você a partir das categorias conhecidas do usuário." },
+            },
+            required: ["indice", "categoria"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: [],
       additionalProperties: false,
     },
   },
@@ -791,6 +826,11 @@ export interface ResultadoTool {
   ehErro: boolean;
 }
 
+export interface ContextoTool {
+  /** Linhas de extrato bancario (OFX/CSV) parseadas deterministicamente neste turno (ver TurnoUsuario em agent.ts) - importar_extrato_bancario resolve por indice a partir daqui, nunca do que a IA digitar. */
+  linhasExtrato?: LinhaExtrato[];
+}
+
 /**
  * Despacha uma tool_use para a funcao de banco correspondente. Erros de
  * validacao/ownership (lancados pelos modulos de src/db/*) sao capturados e
@@ -798,9 +838,14 @@ export interface ResultadoTool {
  * tentar de novo com "outros", ou avisar o usuario) em vez de derrubar a
  * conversa inteira.
  */
-export async function executeTool(name: string, input: unknown, usuarioId: string): Promise<ResultadoTool> {
+export async function executeTool(
+  name: string,
+  input: unknown,
+  usuarioId: string,
+  contexto: ContextoTool = {},
+): Promise<ResultadoTool> {
   try {
-    const resultado = await despachar(name, input, usuarioId);
+    const resultado = await despachar(name, input, usuarioId, contexto);
     return { conteudo: JSON.stringify(resultado), ehErro: false };
   } catch (err) {
     const mensagem = err instanceof Error ? err.message : String(err);
@@ -809,7 +854,7 @@ export async function executeTool(name: string, input: unknown, usuarioId: strin
   }
 }
 
-async function despachar(name: string, input: any, usuarioId: string): Promise<unknown> {
+async function despachar(name: string, input: any, usuarioId: string, contexto: ContextoTool): Promise<unknown> {
   switch (name) {
     case "registrar_gasto":
       return registrarDespesa(usuarioId, input);
@@ -819,6 +864,8 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return editarTransacao(usuarioId, input);
     case "excluir_transacao":
       return excluirTransacao(usuarioId, input.transacao_id, input.motivo);
+    case "importar_extrato_bancario":
+      return importarExtratoBancario(usuarioId, input, contexto.linhasExtrato ?? []);
     case "consultar_transacoes":
       return consultarTransacoes(usuarioId, input);
     case "criar_lancamento_futuro":

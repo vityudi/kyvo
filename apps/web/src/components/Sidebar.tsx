@@ -61,7 +61,7 @@ export function Sidebar({
     if (!conversas) return null;
     const termo = busca.trim().toLowerCase();
     if (!termo) return conversas;
-    return conversas.filter((c) => String(c.telegramChatId).includes(termo));
+    return conversas.filter((c) => (c.titulo ?? "").toLowerCase().includes(termo) || (c.telegramChatId != null && String(c.telegramChatId).includes(termo)));
   }, [conversas, busca]);
 
   async function handleApagar(conversaId: string) {
@@ -203,7 +203,7 @@ export function Sidebar({
                       >
                         <span className="flex w-full items-center gap-2">
                           <span className={`min-w-0 flex-1 truncate ${ativa ? "font-bold" : "font-medium"}`}>
-                            {c.titulo ?? `Usuário #${c.telegramChatId}`}
+                            {c.titulo ?? (c.telegramChatId != null ? `Usuário #${c.telegramChatId}` : "Nova conversa")}
                             {c.status === "arquivada" && (
                               <span className="ml-1.5 align-middle text-[10px] font-normal text-text-tertiary">
                                 arquivada

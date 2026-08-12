@@ -1,41 +1,51 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Paperclip, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
-import { criarConversa, type ConversaResumo } from "../api";
+import { criarConversa, obterUsuarioWeb, type ConversaResumo } from "../api";
 
 interface Props {
-  conversas: ConversaResumo[] | null;
   onConversaCriada: (conversa: ConversaResumo, mensagemInicial: { texto: string; arquivo: File | null }) => void;
 }
 
 interface Contato {
   usuarioId: string;
-  telegramChatId: number;
+  telegramChatId: number | null;
 }
 
-const ACEITA_ANEXO = "image/*,audio/*,application/pdf";
+const ACEITA_ANEXO = "image/*,audio/*,application/pdf,.csv,.ofx,text/csv,application/x-ofx";
 
 /**
  * Tela inicial (sem conversa selecionada), no estilo "novo chat" do
  * OpenWebUI: saudacao central + input flutuante. O app nao e multi-usuario -
- * so existe um contato do Telegram por tras do bot - entao o unico contato
- * ja e resolvido em segundo plano, sem pedir pra escolher nada. A conversa
- * so e criada no backend quando a primeira mensagem e enviada.
+ * so existe um usuario por deploy - entao o unico contato ja e resolvido em
+ * segundo plano (via obterUsuarioWeb), sem pedir pra escolher nada. Da pra
+ * conversar por aqui mesmo sem nenhum contato pelo Telegram ainda, desde que
+ * haja um provedor de IA configurado (Telegram so afeta entrega proativa de
+ * alertas/lembretes, nao a conversa em si). A conversa so e criada no
+ * backend quando a primeira mensagem e enviada.
  */
-export function Home({ conversas, onConversaCriada }: Props) {
+export function Home({ onConversaCriada }: Props) {
   const [texto, setTexto] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  const [contato, setContato] = useState<Contato | null>(null);
+  const [erroContato, setErroContato] = useState<string | null>(null);
 
   const inputArquivoRef = useRef<HTMLInputElement>(null);
 
-  // O contato ja vem resolvido pelo App (fonte unica da lista de conversas,
-  // compartilhada com a Sidebar) - unico contato do Telegram por tras do bot,
-  // entao o primeiro da lista sempre serve.
-  const contato = useMemo<Contato | null>(() => {
-    const primeira = conversas?.[0];
-    return primeira ? { usuarioId: primeira.usuarioId, telegramChatId: primeira.telegramChatId } : null;
-  }, [conversas]);
+  useEffect(() => {
+    let cancelado = false;
+    obterUsuarioWeb()
+      .then((u) => {
+        if (!cancelado) setContato({ usuarioId: u.id, telegramChatId: u.telegramChatId });
+      })
+      .catch((err) => {
+        if (!cancelado) setErroContato(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
   function handleSelecionarArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const selecionado = e.target.files?.[0];
@@ -88,10 +98,8 @@ export function Home({ conversas, onConversaCriada }: Props) {
       </div>
 
       <div className="w-full max-w-2xl">
-        {semContato && (
-          <p className="mb-2 text-center text-sm text-text-secondary">
-            Nenhum contato ainda — assim que alguém falar com o bot no Telegram, dá pra conversar por aqui.
-          </p>
+        {erroContato && (
+          <p className="mb-2 text-center text-sm text-danger">Não consegui preparar a conversa: {erroContato}</p>
         )}
 
         {erroEnvio && (
@@ -140,7 +148,7 @@ export function Home({ conversas, onConversaCriada }: Props) {
                 handleEnviar();
               }
             }}
-            placeholder={semContato ? "Nenhum contato disponível ainda…" : "Enviar mensagem…"}
+            placeholder={semContato ? "Carregando…" : "Enviar mensagem…"}
             rows={1}
             disabled={enviando || semContato}
             className="max-h-32 flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] text-text-primary placeholder:text-text-secondary focus:outline-none disabled:opacity-60"

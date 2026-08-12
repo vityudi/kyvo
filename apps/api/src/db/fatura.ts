@@ -157,6 +157,70 @@ export async function obterOuCriarFaturaAberta(usuarioId: string, cartaoId: stri
   return novaFaturaId;
 }
 
+/** Vencimento relativo a um fechamento ja conhecido (nao calculado a partir de "hoje" como em calcularCicloFatura) - mesmo mes se dia_vencimento >= dia do fechamento, mes seguinte senao. */
+function vencimentoParaFechamento(diaVencimento: number, dataFechamentoIso: string): string {
+  const fechamento = new Date(`${dataFechamentoIso}T00:00:00`);
+  const mesVencimento0 = fechamento.getMonth() + (diaVencimento < fechamento.getDate() ? 1 : 0);
+  return formatarIso(dataDoMes(fechamento.getFullYear(), mesVencimento0, diaVencimento));
+}
+
+/**
+ * Resolve (ou cria) a fatura cujo fechamento e EXATAMENTE `dataFechamento`,
+ * informada explicitamente (nunca calculada a partir do dia_fechamento
+ * cadastrado no cartao) - usado por importarExtratoBancario
+ * (db/extratoImportacao.ts) pra importar uma fatura antiga (OFX/CSV) inteira
+ * como uma unica fatura. Calcular o ciclo a partir de dia_fechamento seria
+ * fragil pra extratos historicos: esse dia pode ter mudado desde entao (o
+ * cartao real pode ter fechado num dia diferente naquela epoca), e de
+ * qualquer forma um arquivo de fatura exportado pelo banco ja e, por
+ * construcao, os lancamentos de uma unica fatura - nao ha nada pra
+ * "recalcular". Se a data informada bater com o ciclo aberto atual,
+ * reaproveita obterOuCriarFaturaAberta (idempotencia/lembrete); senao cria
+ * como 'fechada' direto, sem lembrete/lancamento_futuro pareado (que so faz
+ * sentido pra vencimento futuro).
+ */
+export async function obterOuCriarFaturaPorFechamentoExplicito(
+  usuarioId: string,
+  cartaoId: string,
+  dataFechamento: string,
+  client: PoolClient,
+): Promise<string> {
+  const { rows: existenteRows } = await client.query<{ id: string }>(
+    `select id from fatura where cartao_id = $1 and data_fechamento = $2::date`,
+    [cartaoId, dataFechamento],
+  );
+  if (existenteRows[0]) {
+    return existenteRows[0].id;
+  }
+
+  const hoje = agoraSp().data;
+  if (dataFechamento >= hoje) {
+    return obterOuCriarFaturaAberta(usuarioId, cartaoId, client);
+  }
+
+  const { rows: cartaoRows } = await client.query<{ dia_vencimento: number }>(
+    `select dia_vencimento from cartao where id = $1 and usuario_id = $2 and ativo = true`,
+    [cartaoId, usuarioId],
+  );
+  const cartao = cartaoRows[0];
+  if (!cartao) {
+    throw new Error("cartao nao encontrado, inativo, ou nao pertence a este usuario");
+  }
+  const dataVencimento = vencimentoParaFechamento(cartao.dia_vencimento, dataFechamento);
+
+  const { rows: novaFaturaRows } = await client.query<{ id: string }>(
+    `insert into fatura (usuario_id, cartao_id, data_fechamento, data_vencimento, status)
+     values ($1, $2, $3::date, $4::date, 'fechada')
+     returning id`,
+    [usuarioId, cartaoId, dataFechamento, dataVencimento],
+  );
+  const novaFaturaId = novaFaturaRows[0]?.id;
+  if (!novaFaturaId) {
+    throw new Error("falha ao criar fatura - insert nao retornou linha");
+  }
+  return novaFaturaId;
+}
+
 export async function listarFaturas(usuarioId: string, input: ListarFaturasInput = {}): Promise<Fatura[]> {
   const limite = input.limite ?? 50;
   const { rows } = await pool.query(
