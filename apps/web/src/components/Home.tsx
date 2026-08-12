@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowUp, Paperclip, Sparkle, WarningCircle, X } from "@phosphor-icons/react";
-import { criarConversa, listarConversas, type ConversaResumo } from "../api";
+import { criarConversa, type ConversaResumo } from "../api";
 
 interface Props {
+  conversas: ConversaResumo[] | null;
   onConversaCriada: (conversa: ConversaResumo, mensagemInicial: { texto: string; arquivo: File | null }) => void;
 }
 
@@ -20,9 +21,7 @@ const ACEITA_ANEXO = "image/*,audio/*,application/pdf";
  * ja e resolvido em segundo plano, sem pedir pra escolher nada. A conversa
  * so e criada no backend quando a primeira mensagem e enviada.
  */
-export function Home({ onConversaCriada }: Props) {
-  const [contato, setContato] = useState<Contato | null>(null);
-  const [erroContato, setErroContato] = useState<string | null>(null);
+export function Home({ conversas, onConversaCriada }: Props) {
   const [texto, setTexto] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -30,19 +29,13 @@ export function Home({ onConversaCriada }: Props) {
 
   const inputArquivoRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let cancelado = false;
-    listarConversas()
-      .then((lista) => {
-        if (cancelado) return;
-        const primeira = lista[0];
-        setContato(primeira ? { usuarioId: primeira.usuarioId, telegramChatId: primeira.telegramChatId } : null);
-      })
-      .catch((err) => !cancelado && setErroContato(err instanceof Error ? err.message : String(err)));
-    return () => {
-      cancelado = true;
-    };
-  }, []);
+  // O contato ja vem resolvido pelo App (fonte unica da lista de conversas,
+  // compartilhada com a Sidebar) - unico contato do Telegram por tras do bot,
+  // entao o primeiro da lista sempre serve.
+  const contato = useMemo<Contato | null>(() => {
+    const primeira = conversas?.[0];
+    return primeira ? { usuarioId: primeira.usuarioId, telegramChatId: primeira.telegramChatId } : null;
+  }, [conversas]);
 
   function handleSelecionarArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const selecionado = e.target.files?.[0];
@@ -95,9 +88,7 @@ export function Home({ onConversaCriada }: Props) {
       </div>
 
       <div className="w-full max-w-2xl">
-        {erroContato && <p className="mb-2 text-center text-sm text-danger">Falha ao carregar contato: {erroContato}</p>}
-
-        {semContato && !erroContato && (
+        {semContato && (
           <p className="mb-2 text-center text-sm text-text-secondary">
             Nenhum contato ainda — assim que alguém falar com o bot no Telegram, dá pra conversar por aqui.
           </p>

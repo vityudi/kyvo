@@ -8,7 +8,8 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "npm run dev -w apps/api",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build -w apps/api && npm run build -w apps/web && npm run sync:web-dist",
     "sync:web-dist": "node -e \"const fs=require('fs');fs.rmSync('apps/api/web/dist',{recursive:true,force:true});fs.cpSync('apps/web/dist','apps/api/web/dist',{recursive:true})\"",
@@ -19,5 +20,8 @@
     "seed:llm-config": "npm run seed:llm-config -w apps/api",
     "seed:telegram-config": "npm run seed:telegram-config -w apps/api",
     "seed:groq-config": "npm run seed:groq-config -w apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
   }
 }

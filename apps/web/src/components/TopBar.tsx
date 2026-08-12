@@ -45,18 +45,26 @@ export function TopBar({
   const [dropdownAberto, setDropdownAberto] = useState(false);
   const [telegramConectado, setTelegramConectado] = useState<boolean | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const telaAnteriorRef = useRef<Props["tela"] | null>(null);
 
   useEffect(() => {
+    const veioDeConfig = telaAnteriorRef.current === "config";
+    const primeiraRenderizacao = telaAnteriorRef.current === null;
+    telaAnteriorRef.current = tela;
+    // So busca no primeiro carregamento e ao sair da tela de config - ativar
+    // um provedor ou reconectar o Telegram nao dispara nenhum evento pro
+    // TopBar, entao sem isso o indicador ficava preso no estado do primeiro
+    // carregamento ate um reload de pagina. Nas demais trocas de tela (chat
+    // <-> dashboard/transacoes/contas) nada que afete esses indicadores pode
+    // ter mudado, entao refazer a busca so gera trafego a toa.
+    if (!primeiraRenderizacao && !veioDeConfig) return;
+
     listarProvedores()
       .then(setProvedores)
       .catch(() => setProvedores(null));
     obterStatusTelegram()
       .then((s) => setTelegramConectado(s.conectado))
       .catch(() => setTelegramConectado(false));
-    // Refaz a busca sempre que sai da tela de config - ativar um provedor ou
-    // reconectar o Telegram nao dispara nenhum evento pro TopBar, entao sem
-    // isso o indicador ficava preso no estado do primeiro carregamento ate
-    // um reload de pagina.
   }, [tela]);
 
   useEffect(() => {

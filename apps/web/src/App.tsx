@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { ConversaResumo } from "./api";
+import { useEffect, useState } from "react";
+import { listarConversas, type ConversaResumo } from "./api";
 import { ContasCartoesView } from "./components/ContasCartoesView";
 import { ConversaView } from "./components/ConversaView";
 import { DashboardView } from "./components/DashboardView";
@@ -8,6 +8,7 @@ import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { TransacoesView } from "./components/TransacoesView";
+import { pollingVisivel } from "./lib/pollingVisivel";
 import { useTheme } from "./lib/theme";
 
 interface MensagemInicialPendente {
@@ -24,7 +25,36 @@ export function App() {
   const [atualizarSinal, setAtualizarSinal] = useState(0);
   const [tela, setTela] = useState<Tela>("chat");
   const [sidebarAberta, setSidebarAberta] = useState(true);
+  const [conversas, setConversas] = useState<ConversaResumo[] | null>(null);
+  const [erroConversas, setErroConversas] = useState<string | null>(null);
   const { escuro, alternarTema } = useTheme();
+
+  // Fonte unica da lista de conversas - Sidebar e Home (achar o contato do
+  // Telegram) dependem dela, entao busca aqui em vez de cada tela pedir a
+  // mesma coisa em paralelo. So mantem o polling ligado com a tela de chat
+  // aberta - nas outras telas a lista nao precisa se atualizar sozinha.
+  useEffect(() => {
+    let cancelado = false;
+
+    async function carregar() {
+      try {
+        const lista = await listarConversas();
+        if (!cancelado) {
+          setConversas(lista);
+          setErroConversas(null);
+        }
+      } catch (err) {
+        if (!cancelado) setErroConversas(err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    carregar();
+    const pararPolling = tela === "chat" ? pollingVisivel(carregar, 10_000) : null;
+    return () => {
+      cancelado = true;
+      pararPolling?.();
+    };
+  }, [atualizarSinal, tela]);
 
   function handleNovaConversa() {
     setTela("chat");
@@ -40,6 +70,7 @@ export function App() {
 
   function handleConversaDeletada(conversaId: string) {
     setConversaSelecionada((atual) => (atual?.id === conversaId ? null : atual));
+    setConversas((atual) => atual?.filter((c) => c.id !== conversaId) ?? atual);
   }
 
   return (
@@ -47,14 +78,14 @@ export function App() {
       {sidebarAberta && (
         <div className="glass-panel relative z-[2] flex h-full w-[284px] shrink-0 flex-col overflow-hidden rounded-[22px] border border-glass-border bg-glass">
           <Sidebar
+            conversas={conversas}
+            erro={erroConversas}
             conversaSelecionadaId={conversaSelecionada?.id ?? null}
             telaAtiva={tela === "transacoes" || tela === "dashboard" || tela === "contas" ? tela : null}
-            chatAberto={tela === "chat"}
             onSelecionar={(conversa) => {
               setTela("chat");
               setConversaSelecionada(conversa);
             }}
-            atualizarSinal={atualizarSinal}
             onNovaConversa={handleNovaConversa}
             onAbrirConfig={() => setTela("config")}
             onAbrirTransacoes={() => setTela("transacoes")}
@@ -100,7 +131,7 @@ export function App() {
               onMensagemInicialConsumida={() => setMensagemInicialPendente(null)}
             />
           ) : (
-            <Home onConversaCriada={handleConversaCriada} />
+            <Home conversas={conversas} onConversaCriada={handleConversaCriada} />
           )}
         </main>
       </div>

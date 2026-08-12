@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChartBar,
   Check,
@@ -12,16 +12,15 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { deletarConversa, listarConversas, type ConversaResumo } from "../api";
-import { pollingVisivel } from "../lib/pollingVisivel";
+import { deletarConversa, type ConversaResumo } from "../api";
 import { formatarTempoRelativo, rotuloGrupoData } from "../lib/tempo";
 
 interface Props {
+  conversas: ConversaResumo[] | null;
+  erro: string | null;
   conversaSelecionadaId: string | null;
   telaAtiva: "transacoes" | "dashboard" | "contas" | null;
-  chatAberto: boolean;
   onSelecionar: (conversa: ConversaResumo) => void;
-  atualizarSinal: number;
   onNovaConversa: () => void;
   onAbrirConfig: () => void;
   onAbrirTransacoes: () => void;
@@ -34,14 +33,17 @@ interface Props {
 /**
  * Sidebar unica (logo + nova conversa + busca + lista + configuracoes),
  * no formato do OpenWebUI: uma coluna so, colapsavel, com a lista de chats
- * agrupada por data e um rodape fixo para acoes globais.
+ * agrupada por data e um rodape fixo para acoes globais. A lista de
+ * conversas em si (fetch + polling) vive no App - o Home tambem precisa
+ * dela pra achar o contato do Telegram, entao ter uma unica fonte evita
+ * as duas telas buscarem a mesma coisa em paralelo.
  */
 export function Sidebar({
+  conversas,
+  erro,
   conversaSelecionadaId,
   telaAtiva,
-  chatAberto,
   onSelecionar,
-  atualizarSinal,
   onNovaConversa,
   onAbrirConfig,
   onAbrirTransacoes,
@@ -50,37 +52,10 @@ export function Sidebar({
   onFechar,
   onConversaDeletada,
 }: Props) {
-  const [conversas, setConversas] = useState<ConversaResumo[] | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const [erroApagar, setErroApagar] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [apagandoId, setApagandoId] = useState<string | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelado = false;
-
-    async function carregar() {
-      try {
-        const lista = await listarConversas();
-        if (!cancelado) {
-          setConversas(lista);
-          setErro(null);
-        }
-      } catch (err) {
-        if (!cancelado) setErro(err instanceof Error ? err.message : String(err));
-      }
-    }
-
-    carregar();
-    // So mantem o polling ligado com o chat aberto - nas telas de
-    // dashboard/transacoes/config a lista nao precisa se atualizar sozinha,
-    // e o carregar() acima ja cobre a entrada nessas telas.
-    const pararPolling = chatAberto ? pollingVisivel(carregar, 10_000) : null;
-    return () => {
-      cancelado = true;
-      pararPolling?.();
-    };
-  }, [atualizarSinal, chatAberto]);
 
   const filtradas = useMemo(() => {
     if (!conversas) return null;
@@ -93,10 +68,9 @@ export function Sidebar({
     setApagandoId(conversaId);
     try {
       await deletarConversa(conversaId);
-      setConversas((atual) => atual?.filter((c) => c.id !== conversaId) ?? atual);
       onConversaDeletada(conversaId);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err));
+      setErroApagar(err instanceof Error ? err.message : String(err));
     } finally {
       setApagandoId(null);
       setConfirmandoId(null);
@@ -189,6 +163,7 @@ export function Sidebar({
 
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {erro && <p className="px-2 py-3 text-sm text-danger">Falha ao carregar: {erro}</p>}
+        {erroApagar && <p className="px-2 py-3 text-sm text-danger">Falha ao apagar: {erroApagar}</p>}
 
         {!conversas && !erro && (
           <div className="flex flex-col gap-1 p-1">
