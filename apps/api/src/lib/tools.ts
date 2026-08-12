@@ -1,7 +1,7 @@
 import { buscarPrincipios } from "../db/baseConhecimento.js";
 import { criarCartao, desativarCartao, editarCartao, listarCartoes } from "../db/cartao.js";
-import { criarConta, editarConta, listarContas } from "../db/conta.js";
-import { listarFaturas } from "../db/fatura.js";
+import { criarConta, editarConta, excluirConta, listarContas } from "../db/conta.js";
+import { lancamentoFuturoIdDaFatura, listarFaturas, transacoesDaFatura } from "../db/fatura.js";
 import {
   cancelarPendencia,
   concluirTarefa,
@@ -304,6 +304,17 @@ const baseToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "excluir_conta",
+    description:
+      "Exclui permanentemente uma conta que o usuário não usa mais, ex.: 'apaga a conta Nubank que eu criei sem querer'. Só funciona com uma conta vazia (sem transações, cartões ou lançamentos futuros vinculados) e nunca com a única conta do usuário — nesses casos a tool recusa com um erro explicando o motivo; se isso acontecer, explique a limitação ao usuário e sugira apenas renomear a conta com editar_conta em vez de excluir. Use listar_contas antes se não souber o id.",
+    input_schema: {
+      type: "object",
+      properties: { conta_id: { type: "string", format: "uuid" } },
+      required: ["conta_id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "criar_cartao",
     description:
       "Cadastra um cartão de crédito dentro de uma conta. Pergunte ao usuário o dia de fechamento e o dia de vencimento da fatura se ele não informar — são conceitos diferentes: fechamento é o dia do mês em que a fatura para de acumular compras novas, vencimento é o dia em que ela deve ser paga (geralmente uns dias depois do fechamento). Exemplo: 'cria meu cartão Nubank, fecha dia 25 e vence dia 5'.",
@@ -374,9 +385,36 @@ const baseToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: "pagar_fatura",
+    description:
+      "Marca uma fatura de cartão como paga, registrando a transação de pagamento correspondente. Use quando o usuário disser algo como 'paguei a fatura do Nubank', 'já paguei o cartão esse mês'. Faz a mesma coisa que confirmar_lancamento_futuro no lançamento pareado da fatura, mas sem precisar descobrir o lancamento_id primeiro — informe só o fatura_id (use listar_faturas se não souber qual é). Por padrão usa o valor total já somado das compras do ciclo e a data de vencimento prevista; informe valor/data só se o pagamento efetivo foi diferente (ex.: pagamento parcial).",
+    input_schema: {
+      type: "object",
+      properties: {
+        fatura_id: { type: "string", format: "uuid" },
+        valor: { type: "number", exclusiveMinimum: 0, description: "Valor efetivamente pago, se diferente do total da fatura." },
+        data: { type: "string", format: "date", description: "Data efetiva do pagamento (YYYY-MM-DD), se diferente do vencimento previsto." },
+        hora: { type: "string", pattern: "^\\d{2}:\\d{2}(:\\d{2})?$", description: "Horário efetivo (HH:mm). Omitir para usar o horário atual." },
+      },
+      required: ["fatura_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "listar_transacoes_fatura",
+    description:
+      "Lista as compras individuais que compõem uma fatura específica. Use para responder perguntas como 'o que entrou na fatura do Nubank esse mês', 'quais compras estão nessa fatura'. Use listar_faturas antes se não souber o fatura_id.",
+    input_schema: {
+      type: "object",
+      properties: { fatura_id: { type: "string", format: "uuid" } },
+      required: ["fatura_id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "consultar_transacoes",
     description:
-      "Lista transações (despesas e/ou receitas) filtradas por período e, opcionalmente, categoria ou conta. Use para responder perguntas que precisam do detalhe das transações individuais, não só do total (ex.: 'quais foram meus gastos com mercado em julho?'). Para só o total/agregado, prefira resumo_periodo — mais barato e direto.",
+      "Lista transações (despesas e/ou receitas) filtradas por período e, opcionalmente, categoria, conta, cartão ou fatura. Use para responder perguntas que precisam do detalhe das transações individuais, não só do total (ex.: 'quais foram meus gastos com mercado em julho?', 'o que eu comprei no cartão Nubank esse mês?'). Para só o total/agregado, prefira resumo_periodo — mais barato e direto. Para ver as compras de uma fatura já fechada especificamente, prefira listar_transacoes_fatura (mais direto que filtrar aqui por período).",
     input_schema: {
       type: "object",
       properties: {
@@ -385,6 +423,8 @@ const baseToolDefinitions: ToolDefinition[] = [
         tipo: { type: "string", enum: ["despesa", "receita", "todos"], description: "Filtrar por tipo de transação. Default: todos." },
         categoria: { type: "string" },
         conta_id: { type: "string", format: "uuid" },
+        cartao_id: { type: "string", format: "uuid", description: "Filtra só as compras feitas nesse cartão de crédito (em qualquer fatura). Use listar_cartoes se não souber o id." },
+        fatura_id: { type: "string", format: "uuid", description: "Filtra só as compras de uma fatura (ciclo) específica. Use listar_faturas se não souber o id." },
         limite: { type: "integer", minimum: 1, maximum: 200, description: "Máximo de transações a retornar. Default: 50." },
       },
       required: ["data_inicio", "data_fim"],
@@ -394,7 +434,7 @@ const baseToolDefinitions: ToolDefinition[] = [
   {
     name: "resumo_periodo",
     description:
-      "Retorna totais agregados (não a lista de transações individuais) de um período — total gasto, total recebido, saldo do período, e opcionalmente quebra por categoria. Use para perguntas do tipo 'quanto gastei em julho', 'como foi meu mês', 'gastei mais ou menos que o mês passado'. Mais barato que consultar_transacoes quando o usuário só quer o número final.",
+      "Retorna totais agregados (não a lista de transações individuais) de um período — total gasto, total recebido, saldo do período, e opcionalmente quebra por categoria. Use para perguntas do tipo 'quanto gastei em julho', 'como foi meu mês', 'gastei mais ou menos que o mês passado', 'quanto gastei no cartão X esse mês'.  Mais barato que consultar_transacoes quando o usuário só quer o número final.",
     input_schema: {
       type: "object",
       properties: {
@@ -405,6 +445,7 @@ const baseToolDefinitions: ToolDefinition[] = [
           type: "boolean",
           description: "Se true, inclui a comparação com o período imediatamente anterior de mesma duração (ex.: mês passado). Default: true.",
         },
+        cartao_id: { type: "string", format: "uuid", description: "Restringe o resumo só às compras desse cartão de crédito. Omitir para considerar todas as transações do período. Use listar_cartoes se não souber o id." },
       },
       required: ["data_inicio", "data_fim"],
       additionalProperties: false,
@@ -796,6 +837,8 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return listarContas(usuarioId);
     case "editar_conta":
       return editarConta(usuarioId, input);
+    case "excluir_conta":
+      return excluirConta(usuarioId, input.conta_id);
     case "criar_cartao":
       return criarCartao(usuarioId, input);
     case "listar_cartoes":
@@ -806,6 +849,17 @@ async function despachar(name: string, input: any, usuarioId: string): Promise<u
       return desativarCartao(usuarioId, input.cartao_id);
     case "listar_faturas":
       return listarFaturas(usuarioId, input);
+    case "pagar_fatura": {
+      const lancamentoId = await lancamentoFuturoIdDaFatura(usuarioId, input.fatura_id);
+      return confirmarLancamentoFuturo(usuarioId, {
+        lancamento_id: lancamentoId,
+        valor: input.valor,
+        data: input.data,
+        hora: input.hora,
+      });
+    }
+    case "listar_transacoes_fatura":
+      return transacoesDaFatura(usuarioId, input.fatura_id);
     case "resumo_periodo":
       return resumoPeriodo(usuarioId, input);
     case "consultar_saldo":

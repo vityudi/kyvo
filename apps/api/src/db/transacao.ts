@@ -76,6 +76,8 @@ interface ConsultarTransacoesInput {
   tipo?: "despesa" | "receita" | "todos";
   categoria?: string;
   conta_id?: string;
+  cartao_id?: string;
+  fatura_id?: string;
   limite?: number;
   offset?: number;
 }
@@ -85,6 +87,7 @@ interface ResumoPeriodoInput {
   data_fim: string;
   agrupar_por?: "categoria" | "conta" | "dia" | "nenhum";
   comparar_periodo_anterior?: boolean;
+  cartao_id?: string;
 }
 
 interface ConsultarSaldoInput {
@@ -304,10 +307,23 @@ export async function consultarTransacoes(usuarioId: string, input: ConsultarTra
         and ($4::text = 'todos' or t.tipo = $4)
         and ($5::text is null or lower(t.categoria) = lower($5))
         and ($6::uuid is null or t.conta_id = $6)
+        and ($7::uuid is null or c.id = $7)
+        and ($8::uuid is null or t.fatura_id = $8)
       order by t.data_hora desc
-      limit $7
-      offset $8`,
-    [usuarioId, input.data_inicio, input.data_fim, tipo, input.categoria ?? null, input.conta_id ?? null, limite, offset],
+      limit $9
+      offset $10`,
+    [
+      usuarioId,
+      input.data_inicio,
+      input.data_fim,
+      tipo,
+      input.categoria ?? null,
+      input.conta_id ?? null,
+      input.cartao_id ?? null,
+      input.fatura_id ?? null,
+      limite,
+      offset,
+    ],
   );
 
   // `valor` e coluna `numeric` - o driver pg devolve como string por padrao
@@ -331,13 +347,16 @@ async function totaisPeriodo(
   usuarioId: string,
   dataInicio: string,
   dataFim: string,
+  cartaoId?: string,
 ): Promise<{ total_despesas: number; total_receitas: number }> {
   const { rows } = await pool.query<{ tipo: string; total: string }>(
-    `select tipo, coalesce(sum(valor), 0) as total
-       from transacao
-      where usuario_id = $1 and data between $2::date and $3::date
-      group by tipo`,
-    [usuarioId, dataInicio, dataFim],
+    `select t.tipo, coalesce(sum(t.valor), 0) as total
+       from transacao t
+       left join fatura f on f.id = t.fatura_id
+      where t.usuario_id = $1 and t.data between $2::date and $3::date
+        and ($4::uuid is null or f.cartao_id = $4)
+      group by t.tipo`,
+    [usuarioId, dataInicio, dataFim, cartaoId ?? null],
   );
 
   let totalDespesas = 0;
@@ -353,7 +372,7 @@ export async function resumoPeriodo(usuarioId: string, input: ResumoPeriodoInput
   const agruparPor = input.agrupar_por ?? "categoria";
   const compararPeriodoAnterior = input.comparar_periodo_anterior ?? true;
 
-  const { total_despesas, total_receitas } = await totaisPeriodo(usuarioId, input.data_inicio, input.data_fim);
+  const { total_despesas, total_receitas } = await totaisPeriodo(usuarioId, input.data_inicio, input.data_fim, input.cartao_id);
 
   const resumo: ResumoPeriodo = {
     total_despesas,
@@ -363,12 +382,14 @@ export async function resumoPeriodo(usuarioId: string, input: ResumoPeriodoInput
 
   if (agruparPor === "categoria") {
     const { rows } = await pool.query<{ categoria: string; total: string }>(
-      `select categoria, coalesce(sum(valor), 0) as total
-         from transacao
-        where usuario_id = $1 and data between $2::date and $3::date and tipo = 'despesa'
-        group by categoria
+      `select t.categoria, coalesce(sum(t.valor), 0) as total
+         from transacao t
+         left join fatura f on f.id = t.fatura_id
+        where t.usuario_id = $1 and t.data between $2::date and $3::date and t.tipo = 'despesa'
+          and ($4::uuid is null or f.cartao_id = $4)
+        group by t.categoria
         order by total desc`,
-      [usuarioId, input.data_inicio, input.data_fim],
+      [usuarioId, input.data_inicio, input.data_fim, input.cartao_id ?? null],
     );
     resumo.por_categoria = rows.map((r) => ({ categoria: r.categoria, total: Number(r.total) }));
   } else if (agruparPor === "conta") {
@@ -417,6 +438,7 @@ export async function resumoPeriodo(usuarioId: string, input: ResumoPeriodoInput
       usuarioId,
       inicioAnterior.toISOString().slice(0, 10),
       fimAnterior.toISOString().slice(0, 10),
+      input.cartao_id,
     );
 
     const variacaoPercentual =

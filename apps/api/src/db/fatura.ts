@@ -193,6 +193,27 @@ export async function transacoesDaFatura(usuarioId: string, faturaId: string): P
   return rows.map((r) => ({ ...r, valor: Number(r.valor) }));
 }
 
+/**
+ * Acha o lancamento_futuro pareado de uma fatura (ver alter table
+ * lancamento_futuro add column fatura_id em 0010_contas_cartoes_faturas.sql).
+ * Usado por pagar_fatura (tools.ts) para traduzir "pagar a fatura X" na
+ * chamada de confirmarLancamentoFuturo (db/lancamentoFuturo.ts) sem o
+ * usuario/agente precisar saber o lancamento_id - so consulta simples, sem
+ * importar lancamentoFuturo.ts aqui (evitaria ciclo, ja que ele importa
+ * transacao.ts, que importa este arquivo).
+ */
+export async function lancamentoFuturoIdDaFatura(usuarioId: string, faturaId: string): Promise<string> {
+  const { rows } = await pool.query<{ id: string }>(
+    `select id from lancamento_futuro where usuario_id = $1 and fatura_id = $2`,
+    [usuarioId, faturaId],
+  );
+  const id = rows[0]?.id;
+  if (!id) {
+    throw new Error("fatura nao encontrada, nao pertence a este usuario, ou ja foi paga (sem lancamento futuro pendente vinculado)");
+  }
+  return id;
+}
+
 /** Marca faturas 'aberta' vencidas como 'fechada' - reforco diario (scheduler) do que obterOuCriarFaturaAberta ja faz sob demanda, para ciclos sem nenhuma compra apos o fechamento. */
 export async function fecharFaturasVencidas(): Promise<number> {
   const { rowCount } = await pool.query(

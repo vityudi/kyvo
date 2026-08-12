@@ -1,5 +1,7 @@
 import { criarAnexo, type NovoAnexo } from "../db/anexo.js";
+import { listarCartoes } from "../db/cartao.js";
 import { listarCategorias } from "../db/categoria.js";
+import { listarContas } from "../db/conta.js";
 import {
   TITULO_PLACEHOLDER,
   definirTituloSeAusente,
@@ -28,12 +30,14 @@ const MAX_CONTINUACOES_MAX_TOKENS = 3;
  * sozinha desses dados.
  */
 async function buildSystemPrompt(usuarioId: string): Promise<string> {
-  const [categoriasDespesa, categoriasReceita, orcamentos, metas, regras] = await Promise.all([
+  const [categoriasDespesa, categoriasReceita, orcamentos, metas, regras, contas, cartoes] = await Promise.all([
     listarCategorias(usuarioId, "despesa"),
     listarCategorias(usuarioId, "receita"),
     listarOrcamentos(usuarioId),
     listarMetasAtivas(usuarioId),
     listarRegras(usuarioId),
+    listarContas(usuarioId),
+    listarCartoes(usuarioId),
   ]);
 
   const linhasOrcamentos = orcamentos.length
@@ -53,6 +57,18 @@ async function buildSystemPrompt(usuarioId: string): Promise<string> {
   const linhasRegras = regras.length
     ? regras.map((r) => `- descricoes contendo "${r.padrao_texto}" -> categoria "${r.categoria}"`).join("\n")
     : "- nenhuma regra definida ainda";
+
+  // So mostra a lista de contas quando ha mais de uma - com uma unica conta
+  // o sistema ja assume ela sozinho (contaPadrao(), db/categoria.ts) e nao
+  // ha ambiguidade nenhuma a resolver, entao listar so adicionaria ruido.
+  const linhasContas =
+    contas.length > 1
+      ? contas.map((c) => `- ${c.nome} (id: ${c.id}) - saldo atual: R$ ${c.saldo.toFixed(2)}`).join("\n")
+      : null;
+
+  const linhasCartoes = cartoes.length
+    ? cartoes.map((c) => `- ${c.nome} (id: ${c.id}) - fecha dia ${c.dia_fechamento}, vence dia ${c.dia_vencimento}`).join("\n")
+    : "- nenhum cartao de credito cadastrado ainda";
 
   const blocoMemoriaRag = await buildBlocoMemoriaRag(usuarioId);
 
@@ -89,7 +105,10 @@ Metas ativas do usuario:
 ${linhasMetas}
 
 Regras de categorizacao aprendidas:
-${linhasRegras}${blocoMemoriaRag}`;
+${linhasRegras}
+${linhasContas ? `\nContas do usuario (mais de uma cadastrada - use o id certo (conta_id) ou pergunte quando nao estiver claro qual usar em vez de assumir):\n${linhasContas}\n` : ""}
+Cartoes de credito ativos do usuario (use o id certo (cartao_id) em registrar_gasto/pagar_fatura/listar_faturas sem precisar chamar listar_cartoes de novo so pra resolver o nome):
+${linhasCartoes}${blocoMemoriaRag}`;
 }
 
 /**

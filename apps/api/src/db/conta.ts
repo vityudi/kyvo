@@ -82,3 +82,41 @@ export async function editarConta(usuarioId: string, input: EditarContaInput): P
   const saldoInicial = Number(atualizada.saldo_inicial);
   return { ...atualizada, saldo_inicial: saldoInicial, saldo: saldoInicial + Number(saldoRows[0]?.saldo ?? 0) };
 }
+
+/**
+ * Exclui uma conta permanentemente. So permite quando a conta esta "vazia"
+ * (sem transacao/cartao/lancamento_futuro vinculados) e o usuario tem mais
+ * de uma conta - excluir a unica conta ou uma com historico exigiria
+ * decidir sozinho o que fazer com os registros dependentes (cascade
+ * apagaria tudo, ver migrations 0001/0008/0010), entao preferimos recusar e
+ * deixar o usuario mover/remover esses registros primeiro.
+ */
+export async function excluirConta(usuarioId: string, contaId: string): Promise<{ conta_id: string; ok: true }> {
+  const { rows: totalRows } = await pool.query<{ total: string }>(
+    `select count(*) as total from conta where usuario_id = $1`,
+    [usuarioId],
+  );
+  if (Number(totalRows[0]?.total ?? 0) <= 1) {
+    throw new Error("nao e possivel excluir a unica conta do usuario");
+  }
+
+  const { rows: usoRows } = await pool.query<{ transacoes: string; cartoes: string; lancamentos: string }>(
+    `select
+        (select count(*) from transacao where conta_id = $1) as transacoes,
+        (select count(*) from cartao where conta_id = $1) as cartoes,
+        (select count(*) from lancamento_futuro where conta_id = $1) as lancamentos`,
+    [contaId],
+  );
+  const uso = usoRows[0];
+  if (uso && (Number(uso.transacoes) > 0 || Number(uso.cartoes) > 0 || Number(uso.lancamentos) > 0)) {
+    throw new Error(
+      "conta possui transacoes, cartoes ou lancamentos futuros vinculados - nao pode ser excluida (mova ou remova esses registros antes, ou apenas renomeie a conta)",
+    );
+  }
+
+  const { rowCount } = await pool.query(`delete from conta where id = $1 and usuario_id = $2`, [contaId, usuarioId]);
+  if (!rowCount) {
+    throw new Error("conta nao encontrada ou nao pertence a este usuario");
+  }
+  return { conta_id: contaId, ok: true };
+}
