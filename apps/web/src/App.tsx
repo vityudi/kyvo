@@ -49,6 +49,7 @@ export function App() {
           <Sidebar
             conversaSelecionadaId={conversaSelecionada?.id ?? null}
             telaAtiva={tela === "transacoes" || tela === "dashboard" || tela === "contas" ? tela : null}
+            chatAberto={tela === "chat"}
             onSelecionar={(conversa) => {
               setTela("chat");
               setConversaSelecionada(conversa);

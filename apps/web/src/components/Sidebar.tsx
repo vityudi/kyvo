@@ -19,6 +19,7 @@ import { formatarTempoRelativo, rotuloGrupoData } from "../lib/tempo";
 interface Props {
   conversaSelecionadaId: string | null;
   telaAtiva: "transacoes" | "dashboard" | "contas" | null;
+  chatAberto: boolean;
   onSelecionar: (conversa: ConversaResumo) => void;
   atualizarSinal: number;
   onNovaConversa: () => void;
@@ -38,6 +39,7 @@ interface Props {
 export function Sidebar({
   conversaSelecionadaId,
   telaAtiva,
+  chatAberto,
   onSelecionar,
   atualizarSinal,
   onNovaConversa,
@@ -70,12 +72,15 @@ export function Sidebar({
     }
 
     carregar();
-    const pararPolling = pollingVisivel(carregar, 10_000);
+    // So mantem o polling ligado com o chat aberto - nas telas de
+    // dashboard/transacoes/config a lista nao precisa se atualizar sozinha,
+    // e o carregar() acima ja cobre a entrada nessas telas.
+    const pararPolling = chatAberto ? pollingVisivel(carregar, 10_000) : null;
     return () => {
       cancelado = true;
-      pararPolling();
+      pararPolling?.();
     };
-  }, [atualizarSinal]);
+  }, [atualizarSinal, chatAberto]);
 
   const filtradas = useMemo(() => {
     if (!conversas) return null;

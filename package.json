@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
-    "build": "npm run build -w apps/api && npm run build -w apps/web",
+    "build": "npm run build -w apps/api && npm run build -w apps/web && npm run sync:web-dist",
+    "sync:web-dist": "node -e \"const fs=require('fs');fs.rmSync('apps/api/web/dist',{recursive:true,force:true});fs.cpSync('apps/web/dist','apps/api/web/dist',{recursive:true})\"",
     "start": "npm run start -w apps/api",
     "typecheck": "npm run typecheck -w apps/api",
     "migrate": "npm run migrate -w apps/api",
