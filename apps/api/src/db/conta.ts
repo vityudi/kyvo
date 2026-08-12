@@ -23,8 +23,14 @@ interface EditarContaInput {
 // Mesmo padrao de consultarSaldo em db/transacao.ts ("nota": so reflete o
 // que foi registrado manualmente, nao e saldo bancario real) - aqui soma-se
 // tambem o saldo_inicial informado na criacao/edicao da conta.
+//
+// Despesas com fatura_id (compra no credito, ainda dentro de uma fatura) sao
+// excluidas da soma: essa compra so vira saida de caixa de fato quando a
+// fatura e paga, e o pagamento em si ja e uma transacao propria (tipo
+// despesa, fatura_id nulo) - somar as duas contaria a mesma saida de
+// dinheiro duas vezes.
 const SALDO_SUBQUERY =
-  "c.saldo_inicial + coalesce((select sum(case when t.tipo = 'receita' then t.valor else -t.valor end) from transacao t where t.conta_id = c.id), 0) as saldo";
+  "c.saldo_inicial + coalesce((select sum(case when t.tipo = 'receita' then t.valor else -t.valor end) from transacao t where t.conta_id = c.id and not (t.tipo = 'despesa' and t.fatura_id is not null)), 0) as saldo";
 
 /**
  * Cria uma conta manual adicional. A primeira conta do usuario ja e criada
@@ -76,7 +82,9 @@ export async function editarConta(usuarioId: string, input: EditarContaInput): P
     throw new Error("conta nao encontrada ou nao pertence a este usuario");
   }
   const { rows: saldoRows } = await pool.query<{ saldo: string }>(
-    `select coalesce(sum(case when tipo = 'receita' then valor else -valor end), 0) as saldo from transacao where conta_id = $1`,
+    `select coalesce(sum(case when tipo = 'receita' then valor else -valor end), 0) as saldo
+       from transacao
+      where conta_id = $1 and not (tipo = 'despesa' and fatura_id is not null)`,
     [atualizada.id],
   );
   const saldoInicial = Number(atualizada.saldo_inicial);

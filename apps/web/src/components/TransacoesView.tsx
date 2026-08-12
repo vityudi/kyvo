@@ -12,7 +12,9 @@ import { TransacaoFormModal } from "./TransacaoFormModal";
 
 type AbaTransacoes = "extrato" | "futuros";
 
-const LIMITE_PAGINA = 30;
+// Alto o bastante pra nunca cortar um periodo real (ver conversa: paginacao
+// trocada por carregar tudo de uma vez, sem "Carregar mais").
+const LIMITE_TRANSACOES = 10000;
 // "Sem limite inferior" pro modo extrato (periodo "dia" = "Hoje") - mostra da
 // data de referencia pra tras, sem cortar historico antigo.
 const DATA_INICIO_SEM_LIMITE = "1900-01-01";
@@ -50,8 +52,6 @@ export function TransacoesView() {
   const [categoriasSelecionadas, setCategoriasSelecionadas] = useState<Set<string>>(new Set());
   const [transacoes, setTransacoes] = useState<Transacao[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [temMais, setTemMais] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Transacao | null>(null);
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
@@ -90,17 +90,15 @@ export function TransacoesView() {
 
     async function carregar() {
       try {
-        const pagina = await listarTransacoes({
+        const todas = await listarTransacoes({
           data_inicio,
           data_fim,
           tipo: tipo === "todos" ? undefined : tipo,
-          limite: LIMITE_PAGINA,
+          limite: LIMITE_TRANSACOES,
           offset: 0,
         });
         if (cancelado) return;
-        setTransacoes(pagina);
-        setTemMais(pagina.length === LIMITE_PAGINA);
-        setOffset(0);
+        setTransacoes(todas);
         setErro(null);
       } catch (err) {
         if (!cancelado) setErro(err instanceof Error ? err.message : String(err));
@@ -114,25 +112,6 @@ export function TransacoesView() {
       pararPolling();
     };
   }, [intervaloEfetivo, tipo, recarregarSinal]);
-
-  async function handleCarregarMais() {
-    if (!intervaloEfetivo) return;
-    const novoOffset = offset + LIMITE_PAGINA;
-    try {
-      const pagina = await listarTransacoes({
-        data_inicio: intervaloEfetivo.data_inicio,
-        data_fim: intervaloEfetivo.data_fim,
-        tipo: tipo === "todos" ? undefined : tipo,
-        limite: LIMITE_PAGINA,
-        offset: novoOffset,
-      });
-      setTransacoes((atual) => (atual ? [...atual, ...pagina] : pagina));
-      setTemMais(pagina.length === LIMITE_PAGINA);
-      setOffset(novoOffset);
-    } catch (err) {
-      setErro(err instanceof Error ? err.message : String(err));
-    }
-  }
 
   async function handleExcluir(id: string) {
     try {
@@ -466,15 +445,6 @@ export function TransacoesView() {
             </div>
           </div>
         </div>
-      )}
-
-      {temMais && (
-        <button
-          onClick={handleCarregarMais}
-          className="mt-3 self-center rounded-[10px] border border-border-subtle px-4 py-2 text-[12.5px] font-semibold text-text-secondary transition hover:bg-glass-strong"
-        >
-          Carregar mais
-        </button>
       )}
 
       {modalAberto && (

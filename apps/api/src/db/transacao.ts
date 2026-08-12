@@ -465,6 +465,7 @@ export async function consultarSaldo(
       where usuario_id = $1
         and ($2::date is null or data >= $2::date)
         and ($3::uuid is null or conta_id = $3)
+        and not (tipo = 'despesa' and fatura_id is not null)
       group by tipo`,
     [usuarioId, input.data_inicio ?? null, input.conta_id ?? null],
   );
