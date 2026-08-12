@@ -45,12 +45,13 @@ interface ConsultarTransacoesInput {
   categoria?: string;
   conta_id?: string;
   limite?: number;
+  offset?: number;
 }
 
 interface ResumoPeriodoInput {
   data_inicio: string;
   data_fim: string;
-  agrupar_por?: "categoria" | "conta" | "nenhum";
+  agrupar_por?: "categoria" | "conta" | "dia" | "nenhum";
   comparar_periodo_anterior?: boolean;
 }
 
@@ -212,6 +213,7 @@ export async function excluirTransacao(
 export async function consultarTransacoes(usuarioId: string, input: ConsultarTransacoesInput): Promise<Transacao[]> {
   const tipo = input.tipo ?? "todos";
   const limite = input.limite ?? 50;
+  const offset = input.offset ?? 0;
 
   const { rows } = await pool.query<Transacao>(
     `select id, tipo, valor, categoria, descricao, fonte, data
@@ -222,11 +224,16 @@ export async function consultarTransacoes(usuarioId: string, input: ConsultarTra
         and ($5::text is null or lower(categoria) = lower($5))
         and ($6::uuid is null or conta_id = $6)
       order by data desc, criado_em desc
-      limit $7`,
-    [usuarioId, input.data_inicio, input.data_fim, tipo, input.categoria ?? null, input.conta_id ?? null, limite],
+      limit $7
+      offset $8`,
+    [usuarioId, input.data_inicio, input.data_fim, tipo, input.categoria ?? null, input.conta_id ?? null, limite, offset],
   );
 
-  return rows;
+  // `valor` e coluna `numeric` - o driver pg devolve como string por padrao
+  // (evita perda de precisao), mas o tipo `Transacao.valor` e `number` -
+  // sem essa conversao, somas no consumidor (ex.: painel web) viram
+  // concatenacao de string em vez de soma.
+  return rows.map((r) => ({ ...r, valor: Number(r.valor) }));
 }
 
 export interface ResumoPeriodo {
@@ -235,6 +242,7 @@ export interface ResumoPeriodo {
   saldo: number;
   por_categoria?: { categoria: string; total: number }[];
   por_conta?: { conta_id: string; total: number }[];
+  por_dia?: { data: string; total_despesas: number; total_receitas: number }[];
   periodo_anterior?: { total_despesas: number; variacao_percentual: number | null };
 }
 
@@ -292,6 +300,26 @@ export async function resumoPeriodo(usuarioId: string, input: ResumoPeriodoInput
       [usuarioId, input.data_inicio, input.data_fim],
     );
     resumo.por_conta = rows.map((r) => ({ conta_id: r.conta_id, total: Number(r.total) }));
+  } else if (agruparPor === "dia") {
+    // to_char forca a data a vir como string 'YYYY-MM-DD' - o driver pg
+    // devolve colunas `date` como objeto Date por padrao, o que quebraria o
+    // agrupamento por chave abaixo (duas instancias de Date nunca sao ===).
+    const { rows } = await pool.query<{ data: string; tipo: string; total: string }>(
+      `select to_char(data, 'YYYY-MM-DD') as data, tipo, coalesce(sum(valor), 0) as total
+         from transacao
+        where usuario_id = $1 and data between $2::date and $3::date
+        group by data, tipo
+        order by data asc`,
+      [usuarioId, input.data_inicio, input.data_fim],
+    );
+    const porDiaMapa = new Map<string, { data: string; total_despesas: number; total_receitas: number }>();
+    for (const r of rows) {
+      const entrada = porDiaMapa.get(r.data) ?? { data: r.data, total_despesas: 0, total_receitas: 0 };
+      if (r.tipo === "despesa") entrada.total_despesas = Number(r.total);
+      if (r.tipo === "receita") entrada.total_receitas = Number(r.total);
+      porDiaMapa.set(r.data, entrada);
+    }
+    resumo.por_dia = Array.from(porDiaMapa.values()).sort((a, b) => a.data.localeCompare(b.data));
   }
 
   if (compararPeriodoAnterior) {

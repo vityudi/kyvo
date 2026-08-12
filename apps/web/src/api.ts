@@ -17,7 +17,7 @@ interface ApiErro {
   erro: string;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Content-Type so faz sentido quando ha corpo - com ele setado e body vazio
   // (ex.: POST de acao sem payload), o Fastify rejeita com
   // FST_ERR_CTP_EMPTY_JSON_BODY antes de chegar na rota. FormData tambem

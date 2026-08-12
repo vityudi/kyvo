@@ -23,7 +23,7 @@ export function Modal({ titulo, onFechar, children }: Props) {
       role="presentation"
     >
       <div
-        className="glass-panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-glass-border bg-glass-strong"
+        className="glass-panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-glass-border bg-glass-popover backdrop-blur-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

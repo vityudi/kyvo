@@ -18,6 +18,7 @@ import {
 import { obterResumoGroqConfig, upsertGroqConfig } from "../db/groqConfig.js";
 import { carregarMensagensPaginado } from "../db/mensagem.js";
 import { obterResumoTelegramConfig, upsertTelegramConfig } from "../db/telegramConfig.js";
+import { transacoesRoutes } from "./transacoes.js";
 import type { AnexoPendente, TurnoUsuario } from "../lib/agent.js";
 import { processarMensagem } from "../lib/agent.js";
 import { createAnthropicClient } from "../lib/llm/anthropicClient.js";
@@ -79,6 +80,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     root: join(__dirname, "../../web/dist"),
     prefix: "/",
   });
+
+  await app.register(transacoesRoutes);
 
   app.get("/web/api/providers", async () => listarProvedores());
 

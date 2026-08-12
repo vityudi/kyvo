@@ -1,14 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChatCircle, GearSix, MagnifyingGlass, PencilSimpleLine, SidebarSimple, Trash, X } from "@phosphor-icons/react";
+import {
+  ChartBar,
+  Check,
+  ChatCircle,
+  GearSix,
+  ListBullets,
+  MagnifyingGlass,
+  PencilSimpleLine,
+  SidebarSimple,
+  Trash,
+  X,
+} from "@phosphor-icons/react";
 import { deletarConversa, listarConversas, type ConversaResumo } from "../api";
 import { formatarTempoRelativo, rotuloGrupoData } from "../lib/tempo";
 
 interface Props {
   conversaSelecionadaId: string | null;
+  telaAtiva: "transacoes" | "dashboard" | null;
   onSelecionar: (conversa: ConversaResumo) => void;
   atualizarSinal: number;
   onNovaConversa: () => void;
   onAbrirConfig: () => void;
+  onAbrirTransacoes: () => void;
+  onAbrirDashboard: () => void;
   onFechar: () => void;
   onConversaDeletada: (conversaId: string) => void;
 }
@@ -20,10 +34,13 @@ interface Props {
  */
 export function Sidebar({
   conversaSelecionadaId,
+  telaAtiva,
   onSelecionar,
   atualizarSinal,
   onNovaConversa,
   onAbrirConfig,
+  onAbrirTransacoes,
+  onAbrirDashboard,
   onFechar,
   onConversaDeletada,
 }: Props) {
@@ -102,6 +119,31 @@ export function Sidebar({
           className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] text-text-secondary transition hover:bg-glass-strong"
         >
           <SidebarSimple size={16} />
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-0.5 px-2.5 pb-2">
+        <button
+          onClick={onAbrirDashboard}
+          className={`flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left text-[13.5px] transition ${
+            telaAtiva === "dashboard" ? "bg-accent-soft" : "hover:bg-glass-strong"
+          }`}
+        >
+          <ChartBar size={16} className={telaAtiva === "dashboard" ? "text-accent" : "text-text-secondary"} />
+          <span className={`text-text-primary ${telaAtiva === "dashboard" ? "font-bold" : "font-semibold"}`}>
+            Dashboard
+          </span>
+        </button>
+        <button
+          onClick={onAbrirTransacoes}
+          className={`flex w-full items-center gap-2.5 rounded-[11px] px-2.5 py-2 text-left text-[13.5px] transition ${
+            telaAtiva === "transacoes" ? "bg-accent-soft" : "hover:bg-glass-strong"
+          }`}
+        >
+          <ListBullets size={16} className={telaAtiva === "transacoes" ? "text-accent" : "text-text-secondary"} />
+          <span className={`text-text-primary ${telaAtiva === "transacoes" ? "font-bold" : "font-semibold"}`}>
+            Transações
+          </span>
         </button>
       </div>
 

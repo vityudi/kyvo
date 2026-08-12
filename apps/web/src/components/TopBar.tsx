@@ -15,12 +15,18 @@ const NOME_PROVIDER: Record<string, string> = {
   deepseek: "DeepSeek",
 };
 
+const TITULO_TELA: Record<"config" | "transacoes" | "dashboard", string> = {
+  config: "Configurações",
+  transacoes: "Transações",
+  dashboard: "Dashboard",
+};
+
 interface Props {
   sidebarAberta: boolean;
-  tela: "config" | "outra";
+  tela: "config" | "transacoes" | "dashboard" | "outra";
   onAbrirSidebar: () => void;
   onNovaConversa: () => void;
-  onVoltarConfig: () => void;
+  onVoltar: () => void;
   escuro: boolean;
   onAlternarTema: () => void;
 }
@@ -30,7 +36,7 @@ export function TopBar({
   tela,
   onAbrirSidebar,
   onNovaConversa,
-  onVoltarConfig,
+  onVoltar,
   escuro,
   onAlternarTema,
 }: Props) {
@@ -78,16 +84,16 @@ export function TopBar({
 
   return (
     <header className="relative z-[3] flex shrink-0 items-center gap-2.5 border-b border-border-subtle px-4.5 py-2.5">
-      {tela === "config" ? (
+      {tela !== "outra" ? (
         <>
           <button
-            onClick={onVoltarConfig}
+            onClick={onVoltar}
             aria-label="Voltar"
             className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg text-text-secondary transition hover:bg-glass-strong"
           >
             <ArrowLeft size={16} />
           </button>
-          <h1 className="text-[14.5px] font-bold tracking-tight text-text-primary">Configurações</h1>
+          <h1 className="text-[14.5px] font-bold tracking-tight text-text-primary">{TITULO_TELA[tela]}</h1>
         </>
       ) : (
         !sidebarAberta && (

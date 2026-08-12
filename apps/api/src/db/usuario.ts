@@ -18,6 +18,21 @@ export async function obterUsuarioPorId(id: string): Promise<Usuario | null> {
 }
 
 /**
+ * Resolve o unico usuario existente - o produto e single-tenant hoje (um
+ * unico contato do Telegram por deploy), entao o painel web de
+ * transacoes/dashboard nao precisa de seletor de usuario. Se/quando o app
+ * virar multi-tenant, isso muda para resolver o usuario da sessao logada.
+ */
+export async function obterUsuarioUnico(): Promise<Usuario> {
+  const usuarios = await listarTodosUsuarios();
+  const usuario = usuarios[0];
+  if (!usuario) {
+    throw new Error("nenhum usuario cadastrado ainda");
+  }
+  return usuario;
+}
+
+/**
  * Garante que existe um usuario para este chat do Telegram, criando (com uma
  * conta manual padrao) no primeiro contato. Idempotente.
  */
