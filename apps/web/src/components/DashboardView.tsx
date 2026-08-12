@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { obterResumoDashboard, type ResumoPeriodo } from "../apiFinancas";
 import { corCategoria } from "../lib/categoriaCores";
+import { pollingVisivel } from "../lib/pollingVisivel";
 import type { IntervaloData } from "../lib/tempo";
 import { useChartColors, useTheme } from "../lib/theme";
 import { SeletorPeriodo } from "./SeletorPeriodo";
@@ -57,10 +58,10 @@ export function DashboardView() {
     }
 
     carregar();
-    const intervaloPolling = setInterval(carregar, 10_000);
+    const pararPolling = pollingVisivel(carregar, 10_000);
     return () => {
       cancelado = true;
-      clearInterval(intervaloPolling);
+      pararPolling();
     };
   }, [intervalo]);
 

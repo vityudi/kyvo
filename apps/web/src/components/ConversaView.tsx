@@ -10,6 +10,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { carregarMensagens, enviarMensagem, urlAnexo, type Anexo, type MensagemAdmin } from "../api";
+import { pollingVisivel } from "../lib/pollingVisivel";
 import { formatarHorario } from "../lib/tempo";
 import { Modal } from "./Modal";
 
@@ -81,7 +82,7 @@ export function ConversaView({
   }, [conversaId]);
 
   useEffect(() => {
-    const intervalo = setInterval(async () => {
+    async function poll() {
       // Enquanto handleEnviar esta em voo (aguardando o agente processar o
       // turno), pular o poll evita misturar a mensagem otimista com a
       // mensagem real ja persistida (mesmo conteudo, id diferente) - o
@@ -93,8 +94,8 @@ export function ConversaView({
       } catch {
         // polling silencioso - erro de rede pontual nao deve interromper a conversa aberta
       }
-    }, 10_000);
-    return () => clearInterval(intervalo);
+    }
+    return pollingVisivel(poll, 10_000);
   }, [conversaId]);
 
   useEffect(() => {

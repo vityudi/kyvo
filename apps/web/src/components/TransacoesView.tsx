@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
 import { excluirTransacao, listarTransacoes, type Transacao, type TipoTransacao } from "../apiFinancas";
 import { corCategoria, corTextoBadgeCategoria } from "../lib/categoriaCores";
+import { pollingVisivel } from "../lib/pollingVisivel";
 import { formatarHorario, rotuloMesAno, type IntervaloData } from "../lib/tempo";
 import { useTheme } from "../lib/theme";
 import { LancamentosFuturosTab } from "./LancamentosFuturosTab";
@@ -106,10 +107,10 @@ export function TransacoesView() {
     }
 
     carregar();
-    const intervaloPolling = setInterval(carregar, 10_000);
+    const pararPolling = pollingVisivel(carregar, 10_000);
     return () => {
       cancelado = true;
-      clearInterval(intervaloPolling);
+      pararPolling();
     };
   }, [intervaloEfetivo, tipo, recarregarSinal]);
 

@@ -12,6 +12,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { deletarConversa, listarConversas, type ConversaResumo } from "../api";
+import { pollingVisivel } from "../lib/pollingVisivel";
 import { formatarTempoRelativo, rotuloGrupoData } from "../lib/tempo";
 
 interface Props {
@@ -66,10 +67,10 @@ export function Sidebar({
     }
 
     carregar();
-    const intervalo = setInterval(carregar, 10_000);
+    const pararPolling = pollingVisivel(carregar, 10_000);
     return () => {
       cancelado = true;
-      clearInterval(intervalo);
+      pararPolling();
     };
   }, [atualizarSinal]);
 
