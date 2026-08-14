@@ -38,6 +38,20 @@ export async function categoriaValida(usuarioId: string, categoria: string, tipo
 }
 
 /**
+ * Usado onde o agente tem liberdade para cunhar uma categoria nova (hoje so
+ * receita/fonte - despesa continua fechada a lista conhecida via
+ * categoriaValida). Se `nome` ja existe (mesmo global), nao duplica - so
+ * cria uma categoria propria do usuario quando e genuinamente inedita, pra
+ * que ela passe a aparecer na lista injetada no system prompt (agent.ts) e
+ * o agente prefira reaproveita-la da proxima vez em vez de cunhar outra
+ * variante especifica pra mesma coisa.
+ */
+export async function garantirCategoria(usuarioId: string, nome: string, tipo: TipoTransacao): Promise<void> {
+  if (await categoriaValida(usuarioId, nome, tipo)) return;
+  await pool.query(`insert into categoria (usuario_id, nome, tipo) values ($1, $2, $3)`, [usuarioId, nome, tipo]);
+}
+
+/**
  * Conta manual padrao criada no primeiro contato do usuario (ver
  * db/usuario.ts) - usada quando conta_id nao e informado. So funciona
  * enquanto o usuario tiver exatamente uma conta: assim que ele cadastra uma

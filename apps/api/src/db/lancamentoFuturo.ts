@@ -1,6 +1,6 @@
 import { partesSp, resolverDataHoraLocalSp } from "../lib/tempo.js";
 import { cancelarPendencia, criarLembrete, type Recorrencia } from "./lembrete.js";
-import { categoriaValida, contaPadrao } from "./categoria.js";
+import { categoriaValida, contaPadrao, garantirCategoria } from "./categoria.js";
 import { pool } from "./pool.js";
 import { registrarDespesa, registrarReceita } from "./transacao.js";
 
@@ -49,6 +49,7 @@ interface EditarLancamentoFuturoInput {
   lancamento_id: string;
   valor?: number;
   categoria?: string;
+  fonte?: string;
   descricao?: string;
   data_prevista?: string;
   hora?: string;
@@ -152,8 +153,12 @@ export async function criarLancamentoFuturo(
   if (!categoria) {
     throw new Error(input.tipo === "receita" ? "informe a fonte da receita prevista" : "informe a categoria da despesa prevista");
   }
-  if (!(await categoriaValida(usuarioId, categoria, input.tipo))) {
-    throw new Error(`categoria "${categoria}" nao reconhecida para ${input.tipo}s. Use uma categoria conhecida do usuario ou "outros".`);
+  if (input.tipo === "despesa") {
+    if (!(await categoriaValida(usuarioId, categoria, "despesa"))) {
+      throw new Error(`categoria "${categoria}" nao reconhecida para despesas. Use uma categoria conhecida do usuario ou "outros".`);
+    }
+  } else {
+    await garantirCategoria(usuarioId, categoria, "receita");
   }
 
   const contaId = input.conta_id ?? (await contaPadrao(usuarioId));
@@ -230,20 +235,40 @@ export async function editarLancamentoFuturo(
   if (atual.fatura_id && input.valor != null) {
     throw new Error("faturas têm valor calculado automaticamente a partir das compras — edite/exclua a transação de crédito em vez disso");
   }
-  if (input.categoria && !(await categoriaValida(usuarioId, input.categoria, atual.tipo))) {
-    throw new Error(`categoria "${input.categoria}" nao reconhecida para ${atual.tipo}s.`);
+
+  // mesmo esquema categoria/fonte de editarTransacao (db/transacao.ts) - o
+  // form do painel manda "fonte" pra receita e "categoria" pra despesa
+  const novaCategoria = input.categoria ?? input.fonte;
+  if (novaCategoria) {
+    if (atual.tipo === "despesa") {
+      if (!(await categoriaValida(usuarioId, novaCategoria, "despesa"))) {
+        throw new Error(`categoria "${novaCategoria}" nao reconhecida para despesas.`);
+      }
+    } else {
+      await garantirCategoria(usuarioId, novaCategoria, "receita");
+    }
   }
+  const novaFonte = atual.tipo === "receita" ? (novaCategoria ?? null) : null;
 
   const { rows } = await pool.query(
     `update lancamento_futuro
         set valor         = coalesce($3, valor),
             categoria     = coalesce($4, categoria),
+            fonte         = coalesce($7, fonte),
             descricao     = coalesce($5, descricao),
             data_prevista = coalesce($6::date, data_prevista),
             atualizado_em = now()
       where id = $1 and usuario_id = $2
       returning ${SELECT_CAMPOS}`,
-    [input.lancamento_id, usuarioId, input.valor ?? null, input.categoria ?? null, input.descricao ?? null, input.data_prevista ?? null],
+    [
+      input.lancamento_id,
+      usuarioId,
+      input.valor ?? null,
+      novaCategoria ?? null,
+      input.descricao ?? null,
+      input.data_prevista ?? null,
+      novaFonte,
+    ],
   );
 
   const atualizado = rows[0];

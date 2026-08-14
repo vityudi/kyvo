@@ -113,7 +113,11 @@ const baseToolDefinitions: ToolDefinition[] = [
       type: "object",
       properties: {
         valor: { type: "number", exclusiveMinimum: 0, description: "Valor da receita em reais (BRL)" },
-        fonte: { type: "string", description: "Origem da receita, ex.: 'salário', 'freelance - projeto X', 'venda de item usado'" },
+        fonte: {
+          type: "string",
+          description:
+            "Origem da receita. Prefira reaproveitar uma das categorias de receita já conhecidas do usuário (ver lista no system prompt) em vez de cunhar uma nova. Só crie uma categoria nova quando nenhuma existente fizer sentido — e nesse caso use um rótulo curto e genérico e reaproveitável (ex.: 'reembolso', 'venda', 'presente'), nunca algo específico desta transação (evite nomes de pessoas, empresas ou detalhes pontuais — isso vai em descricao, não em fonte).",
+        },
         descricao: { type: "string", description: "Descrição adicional opcional" },
         data: { type: "string", format: "date", description: "Data da receita no formato YYYY-MM-DD. Omitir para usar a data de hoje." },
         hora: {
@@ -142,7 +146,12 @@ const baseToolDefinitions: ToolDefinition[] = [
       properties: {
         transacao_id: { type: "string", format: "uuid", description: "ID da transação a corrigir" },
         valor: { type: "number", exclusiveMinimum: 0 },
-        categoria: { type: "string" },
+        categoria: { type: "string", description: "Nova categoria — só para despesa. Deve corresponder a uma categoria já conhecida do usuário." },
+        fonte: {
+          type: "string",
+          description:
+            "Nova origem — só para receita. Prefira reaproveitar uma fonte já conhecida do usuário; só cunhe uma nova se nenhuma existente fizer sentido, e nesse caso mantenha um rótulo curto e genérico (ex.: 'reembolso'), sem detalhes específicos desta transação.",
+        },
         descricao: { type: "string" },
         data: { type: "string", format: "date", description: "Nova data (YYYY-MM-DD). Informe só se o usuário quiser corrigir o dia." },
         hora: {
@@ -213,7 +222,11 @@ const baseToolDefinitions: ToolDefinition[] = [
         tipo: { type: "string", enum: ["despesa", "receita"] },
         valor: { type: "number", exclusiveMinimum: 0, description: "Valor previsto em reais (BRL)" },
         categoria: { type: "string", description: "Categoria (despesa) — obrigatório quando tipo = 'despesa'. Deve corresponder a uma categoria conhecida do usuário; use 'outros' se não tiver certeza." },
-        fonte: { type: "string", description: "Origem (receita) — obrigatório quando tipo = 'receita', ex.: 'salário', 'freelance'." },
+        fonte: {
+          type: "string",
+          description:
+            "Origem (receita) — obrigatório quando tipo = 'receita'. Prefira reaproveitar uma fonte já conhecida do usuário; se precisar cunhar uma nova, mantenha um rótulo curto e genérico, sem detalhes específicos deste lançamento.",
+        },
         descricao: { type: "string", description: "Descrição curta, ex.: 'Aluguel do apartamento'" },
         data_prevista: {
           type: "string",
@@ -277,7 +290,11 @@ const baseToolDefinitions: ToolDefinition[] = [
       properties: {
         lancamento_id: { type: "string", format: "uuid" },
         valor: { type: "number", exclusiveMinimum: 0 },
-        categoria: { type: "string" },
+        categoria: { type: "string", description: "Nova categoria — só para despesa." },
+        fonte: {
+          type: "string",
+          description: "Nova origem — só para receita. Prefira uma fonte já conhecida do usuário a cunhar uma nova específica desta transação.",
+        },
         descricao: { type: "string" },
         data_prevista: { type: "string", format: "date" },
         hora: { type: "string", pattern: "^\\d{2}:\\d{2}(:\\d{2})?$" },

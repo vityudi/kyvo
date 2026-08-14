@@ -1,6 +1,6 @@
 import { logger } from "../lib/logger.js";
 import { agoraSp, partesSp, resolverDataHoraLocalSp } from "../lib/tempo.js";
-import { categoriaValida, contaPadrao } from "./categoria.js";
+import { categoriaValida, contaPadrao, garantirCategoria } from "./categoria.js";
 import { obterOuCriarFaturaAberta } from "./fatura.js";
 import { pool } from "./pool.js";
 
@@ -42,6 +42,7 @@ interface EditarTransacaoInput {
   transacao_id: string;
   valor?: number;
   categoria?: string;
+  fonte?: string;
   descricao?: string;
   data?: string;
   hora?: string;
@@ -207,7 +208,12 @@ export async function registrarReceita(
 
   // categoria e denormalizada como texto livre (ver schema) - para receita
   // reaproveitamos a propria "fonte" como categoria, ja que a tool
-  // registrar_receita nao expoe um campo categoria separado.
+  // registrar_receita nao expoe um campo categoria separado. Ao contrario de
+  // despesa, aqui o agente pode cunhar uma fonte inedita (garantirCategoria
+  // persiste pra ela virar "conhecida" e ser reaproveitada da proxima vez,
+  // em vez do agente inventar uma variante especifica a cada transacao).
+  await garantirCategoria(usuarioId, input.fonte, "receita");
+
   const { rows } = await pool.query<{ id: string; valor: string; fonte: string; data: string; data_hora: string }>(
     `insert into transacao (usuario_id, conta_id, tipo, valor, categoria, fonte, descricao, data_hora, confianca)
      values ($1, $2, 'receita', $3, $4, $4, $5, coalesce($6::timestamptz, now()), $7)
@@ -247,16 +253,35 @@ async function buscarTransacao(usuarioId: string, transacaoId: string): Promise<
 export async function editarTransacao(usuarioId: string, input: EditarTransacaoInput): Promise<Transacao> {
   const atual = await buscarTransacao(usuarioId, input.transacao_id);
 
-  if (input.categoria && !(await categoriaValida(usuarioId, input.categoria, atual.tipo))) {
-    throw new Error(`categoria "${input.categoria}" nao reconhecida para ${atual.tipo}s.`);
+  // Receita usa a coluna "fonte" como o nome de campo pro usuario (ver
+  // registrarReceita) - "categoria" e "fonte" guardam o mesmo valor pra essa
+  // transacao, entao aceitamos ou o campo (o form do painel manda "fonte"
+  // pra receita e "categoria" pra despesa - so um dos dois vem preenchido).
+  const novaCategoria = input.categoria ?? input.fonte;
+
+  if (novaCategoria) {
+    if (atual.tipo === "despesa") {
+      if (!(await categoriaValida(usuarioId, novaCategoria, "despesa"))) {
+        throw new Error(`categoria "${novaCategoria}" nao reconhecida para despesas.`);
+      }
+    } else {
+      // receita pode cunhar uma fonte inedita, mas persistimos ela como
+      // categoria conhecida pra virar preferencia de reaproveitamento (ver
+      // garantirCategoria)
+      await garantirCategoria(usuarioId, novaCategoria, "receita");
+    }
   }
 
   const novaDataHora = resolverDataHoraEdicao(atual.data_hora, input.data, input.hora);
+  // so receita usa a coluna fonte (ver comentario acima) - despesa nunca
+  // teve fonte preenchida, entao nao a tocamos nesse caso
+  const novaFonte = atual.tipo === "receita" ? (novaCategoria ?? null) : null;
 
   const { rows } = await pool.query<Transacao>(
     `update transacao
         set valor         = coalesce($3, valor),
             categoria     = coalesce($4, categoria),
+            fonte         = coalesce($7, fonte),
             descricao     = coalesce($5, descricao),
             data_hora     = coalesce($6::timestamptz, data_hora),
             atualizado_em = now()
@@ -266,9 +291,10 @@ export async function editarTransacao(usuarioId: string, input: EditarTransacaoI
       input.transacao_id,
       usuarioId,
       input.valor ?? null,
-      input.categoria ?? null,
+      novaCategoria ?? null,
       input.descricao ?? null,
       novaDataHora ?? null,
+      novaFonte,
     ],
   );
 

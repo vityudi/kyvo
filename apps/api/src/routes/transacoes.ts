@@ -33,6 +33,7 @@ interface CriarTransacaoBody {
 interface EditarTransacaoBody {
   valor?: number;
   categoria?: string;
+  fonte?: string;
   descricao?: string;
   data?: string;
   hora?: string;
